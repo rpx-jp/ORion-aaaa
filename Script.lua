@@ -146,9 +146,11 @@ local emeraldGreen = Color3.fromRGB(0, 220, 150)
 local shinySilver  = Color3.fromRGB(240, 245, 255)
 
 -- ==========================================
--- ★ DebrisField ESP システム構築部分 ★
+-- ★ DebrisField ESP & フィルター動的システム ★
 -- ==========================================
 local ESP_DebrisEnabled = false
+local selectedFilterItem = "All Items"
+local debrisItemsList = {"All Items"}
 local DebrisESPContainer = {}
 
 local function clearDebrisESP()
@@ -179,7 +181,7 @@ local function createDebrisESP(model)
 
     local displayName = getModelMeshName(model)
 
-    -- Highlight (外形発光線)
+    -- Highlight (外形発光)
     local highlight = Instance.new("Highlight")
     highlight.Name = "Xunzn_DebrisHighlight"
     highlight.Adornee = model
@@ -187,15 +189,17 @@ local function createDebrisESP(model)
     highlight.FillTransparency = 0.65
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
+    highlight.Enabled = (selectedFilterItem == "All Items" or selectedFilterItem == displayName)
     highlight.Parent = primaryPart
 
-    -- BillboardGui (名前・距離ネームタグ)
+    -- BillboardGui (ネームタグ)
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "Xunzn_DebrisBillboard"
     billboard.Adornee = primaryPart
     billboard.Size = UDim2.new(0, 160, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 2.5, 0)
     billboard.AlwaysOnTop = true
+    billboard.Enabled = (selectedFilterItem == "All Items" or selectedFilterItem == displayName)
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Parent = billboard
@@ -219,7 +223,78 @@ local function createDebrisESP(model)
     }
 end
 
--- ESPループ（距離のリアルタイム更新）
+-- Objectsタブ UI構築（AddSection / AddToggle / AddDropdown / Refresh）
+if ObjectTab then
+    -- セクション作成
+    ObjectTab:AddSection({
+        Name = getGradientText("DebrisField Detector & Filter", emeraldGreen, shinySilver)
+    })
+
+    -- トグル作成
+    ObjectTab:AddToggle({
+        Name = "Enable DebrisField ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_DebrisEnabled = Value
+            ShowToggleNotification("DebrisField ESP", Value)
+            if not Value then
+                clearDebrisESP()
+            end
+        end
+    })
+
+    -- ドロップダウン作成
+    local DebrisDropdown = ObjectTab:AddDropdown({
+        Name = "Filter Target Item",
+        Default = "All Items",
+        Options = debrisItemsList,
+        Callback = function(Value)
+            selectedFilterItem = Value
+            ShowNotification("Item Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+            
+            -- フィルター選択に合わせてESP表示をリアルタイム切り替え
+            for model, elements in pairs(DebrisESPContainer) do
+                local visible = (selectedFilterItem == "All Items" or elements.DisplayName == selectedFilterItem)
+                if elements.Highlight then elements.Highlight.Enabled = visible end
+                if elements.Billboard then elements.Billboard.Enabled = visible end
+            end
+        end
+    })
+
+    -- ドロップダウン動的リフレッシュボタン
+    ObjectTab:AddButton({
+        Name = "Scan & Refresh Item List",
+        Callback = function()
+            local newList = {"All Items"}
+            local debrisFolder = workspace:FindFirstChild("DebrisField")
+            if debrisFolder then
+                local foundNames = {}
+                for _, model in ipairs(debrisFolder:GetChildren()) do
+                    local name = getModelMeshName(model)
+                    if name and not foundNames[name] then
+                        foundNames[name] = true
+                        table.insert(newList, name)
+                    end
+                end
+            end
+            
+            table.sort(newList, function(a, b)
+                if a == "All Items" then return true end
+                if b == "All Items" then return false end
+                return a < b
+            end)
+
+            debrisItemsList = newList
+            -- ドロップダウンを動的に更新 (第二引数の true で古い選択肢ボタンを消去)
+            DebrisDropdown:Refresh(debrisItemsList, true)
+            DebrisDropdown:Set("All Items")
+            
+            Notify("Items Scanned", "Found " .. tostring(#debrisItemsList - 1) .. " unique item types!", "Yes")
+        end
+    })
+end
+
+-- ESPメインループ
 task.spawn(function()
     while task.wait(0.3) do
         if ESP_DebrisEnabled then
@@ -235,8 +310,14 @@ task.spawn(function()
                     
                     local espData = DebrisESPContainer[model]
                     if espData and espData.Label and espData.Part and rootPart then
-                        local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
-                        espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                        local isVisible = (selectedFilterItem == "All Items" or espData.DisplayName == selectedFilterItem)
+                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
+                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
+
+                        if isVisible then
+                            local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
+                            espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                        end
                     end
                 end
             end
@@ -247,22 +328,6 @@ task.spawn(function()
         end
     end
 end)
-
--- ObjectsタブにESPトグルボタンを追加
-if ObjectTab then
-    ObjectTab:AddSection({Name = getGradientText("DebrisField Detector", emeraldGreen, shinySilver)})
-    ObjectTab:AddToggle({
-        Name = "DebrisField Items ESP",
-        Default = false,
-        Callback = function(Value)
-            ESP_DebrisEnabled = Value
-            ShowToggleNotification("DebrisField ESP", Value)
-            if not Value then
-                clearDebrisESP()
-            end
-        end
-    })
-end
 
 -- FPS計測
 do
