@@ -50,6 +50,8 @@ local function translateToEnglish(text)
     return text
 end
 
+-- ★ 通知設定変数 ★
+local NotificationsEnabled = true
 local NotificationSettings={
     EnableImage="rbxassetid://14562122532",
     DisableImage="rbxassetid://17829927053",
@@ -61,8 +63,9 @@ local NotificationSettings={
     Volume=1
 }
 
--- アイコン360度回転付き通知関数
+-- アイコン回転付き通知関数 (ON/OFF連動)
 local function ShowNotification(title, content, image, soundId)
+    if not NotificationsEnabled then return end
     local imgId = image or NotificationSettings.CheckImage
     
     OrionLib:MakeNotification({
@@ -95,7 +98,7 @@ local function ShowNotification(title, content, image, soundId)
         end
     end)
 
-    if soundId then
+    if soundId and NotificationSettings.Volume > 0 then
         local sound = Instance.new("Sound")
         sound.Parent = service.SoundService
         sound.Volume = NotificationSettings.Volume
@@ -144,7 +147,7 @@ else
     Window:MakeTabGroup({ Name = "Others", Title = "Others" })
 end
 
-local ESPTab, ObjectTab
+local ESPTab, ObjectTab, ConfigTab
 if not isLobby then
     local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
     local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
@@ -160,7 +163,7 @@ local InfoTab = Window:MakeTab({Name = "Information", Icon = "info", Group = "Ot
 
 if not isLobby then
     local MiscTab = Window:MakeTab({Name = "Misc", Icon = "box", Group = "Others", PremiumOnly = false})
-    local ConfigTab = Window:MakeTab({Name = "Settings", Icon = "settings", Group = "Others", PremiumOnly = false})
+    ConfigTab = Window:MakeTab({Name = "Settings", Icon = "settings", Group = "Others", PremiumOnly = false})
     local PremiumInfoTab = Window:MakeTab({Name = "Premium Info", Icon = "crown", Group = "Others", PremiumOnly = false})
     local CreditsTab = Window:MakeTab({Name = "Credits", Icon = "user-round-check", Group = "Others", PremiumOnly = false})
 end
@@ -172,8 +175,8 @@ local fps = 0
 local emeraldGreen = Color3.fromRGB(0, 220, 150)
 local shinySilver  = Color3.fromRGB(240, 245, 255)
 
--- 未判定アイテム用謝罪メッセージ
-local UNKNOWN_ITEM_MSG = "(Sorry... I'm a solo scripter, so it took too much time to support so many items and I couldn't finish it. Sorry 🥺💦)"
+-- 未特定アイテム用の短い表記
+local UNKNOWN_ITEM_MSG = "Unknown Item"
 
 -- 食べ物キーワード判定リスト
 local foodKeywords = {
@@ -194,7 +197,133 @@ local function isFoodItem(name)
 end
 
 -- ==========================================
--- ★ 素材／食べ物 分離ESPシステム ★
+-- ★ 1. Player ESP システム ★
+-- ==========================================
+local ESP_PlayerEnabled = false
+local PlayerESPContainer = {}
+
+local function clearPlayerESP()
+    for player, elements in pairs(PlayerESPContainer) do
+        if elements.Highlight then elements.Highlight:Destroy() end
+        if elements.Billboard then elements.Billboard:Destroy() end
+    end
+    table.clear(PlayerESPContainer)
+end
+
+local function createPlayerESP(player)
+    if player == LocalPlayer then return end
+    if not ESP_PlayerEnabled then return end
+    if PlayerESPContainer[player] then return end
+
+    local char = player.Character
+    if not char then return end
+
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not rootPart or not humanoid then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Xunzn_PlayerHighlight"
+    highlight.Adornee = char
+    highlight.FillColor = Color3.fromRGB(255, 50, 80)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.Parent = char
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Xunzn_PlayerBillboard"
+    billboard.Adornee = rootPart
+    billboard.Size = UDim2.new(0, 180, 0, 35)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Parent = billboard
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 80, 100)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextSize = 14
+    nameLabel.Text = player.DisplayName or player.Name
+
+    billboard.Parent = char
+
+    PlayerESPContainer[player] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        Label = nameLabel,
+        Root = rootPart,
+        Humanoid = humanoid,
+        Player = player
+    }
+end
+
+-- ==========================================
+-- ★ 2. Chests ESP システム (中身探査なし) ★
+-- ==========================================
+local ESP_ChestsEnabled = false
+local ChestsESPContainer = {}
+
+local function clearChestsESP()
+    for model, elements in pairs(ChestsESPContainer) do
+        if elements.Highlight then elements.Highlight:Destroy() end
+        if elements.Billboard then elements.Billboard:Destroy() end
+    end
+    table.clear(ChestsESPContainer)
+end
+
+local function createChestESP(model)
+    if not ESP_ChestsEnabled then return end
+    if ChestsESPContainer[model] then return end
+
+    local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
+    if not primaryPart then return end
+
+    local displayName = model.Name
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Xunzn_ChestHighlight"
+    highlight.Adornee = model
+    highlight.FillColor = Color3.fromRGB(255, 215, 0)
+    highlight.FillTransparency = 0.6
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.Parent = primaryPart
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Xunzn_ChestBillboard"
+    billboard.Adornee = primaryPart
+    billboard.Size = UDim2.new(0, 160, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.AlwaysOnTop = true
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Parent = billboard
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 220, 50)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextSize = 14
+    nameLabel.Text = displayName
+
+    billboard.Parent = primaryPart
+
+    ChestsESPContainer[model] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        Label = nameLabel,
+        Part = primaryPart,
+        DisplayName = displayName
+    }
+end
+
+-- ==========================================
+-- ★ 3. Debris & Food ESP システム ★
 -- ==========================================
 local ESP_MaterialsEnabled = false
 local selectedMaterialItem = "All Materials"
@@ -216,7 +345,6 @@ local function clearDebrisESP()
     table.clear(DebrisESPContainer)
 end
 
--- モデル内部名判定（数字のみのものは謝罪メッセージに置換）
 local function getModelMeshName(model)
     for _, desc in ipairs(model:GetDescendants()) do
         if desc:IsA("MeshPart") or desc:IsA("SpecialMesh") then
@@ -243,7 +371,6 @@ local function createDebrisESP(model)
     local displayName = getModelMeshName(model)
     local isFood = isFoodItem(displayName)
 
-    -- 可視性判定
     local isVisible = false
     if isFood then
         if ESP_FoodEnabled then
@@ -255,7 +382,6 @@ local function createDebrisESP(model)
         end
     end
 
-    -- Highlight (外形発光線)
     local highlight = Instance.new("Highlight")
     highlight.Name = "Xunzn_DebrisHighlight"
     highlight.Adornee = model
@@ -266,7 +392,6 @@ local function createDebrisESP(model)
     highlight.Enabled = isVisible
     highlight.Parent = primaryPart
 
-    -- BillboardGui (ネームタグ)
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "Xunzn_DebrisBillboard"
     billboard.Adornee = primaryPart
@@ -298,7 +423,7 @@ local function createDebrisESP(model)
     }
 end
 
--- 完全全自動スキャン＆カテゴリ別ドロップダウン自動更新関数
+-- 全自動スキャン＆ドロップダウン自動更新関数
 local function scanAndRefreshDropdowns()
     local debrisFolder = workspace:FindFirstChild("DebrisField")
     local foundMaterialsMap = {}
@@ -333,19 +458,16 @@ local function scanAndRefreshDropdowns()
 
     table.sort(currentFoods)
 
-    -- Materials リスト生成
     local newMatList = {"All Materials"}
     for _, name in ipairs(currentMaterials) do
         table.insert(newMatList, name)
     end
 
-    -- Food リスト生成
     local newFoodList = {"All Foods"}
     for _, name in ipairs(currentFoods) do
         table.insert(newFoodList, name)
     end
 
-    -- Materials 変化チェック
     local matChanged = (#newMatList ~= #materialsList)
     if not matChanged then
         for i = 1, #newMatList do
@@ -356,7 +478,6 @@ local function scanAndRefreshDropdowns()
         end
     end
 
-    -- Food 変化チェック
     local foodChanged = (#newFoodList ~= #foodList)
     if not foodChanged then
         for i = 1, #newFoodList do
@@ -386,13 +507,49 @@ local function scanAndRefreshDropdowns()
     end
 
     if matChanged or foodChanged then
-        Notify("Items Discovered", "Automatically updated Material and Food ESP lists!", "Check")
+        Notify("Items Discovered", "Updated Material and Food ESP lists!", "Check")
     end
 end
 
--- ESPTab 内 UI 構築 (カテゴリ分け)
+-- ==========================================
+-- ★ ESPTab UI 構築 (全ESP機能集約) ★
+-- ==========================================
 if ESPTab then
-    -- 素材・パーツ系セクション
+    -- 1. Player ESP セクション
+    ESPTab:AddSection({
+        Name = getGradientText("Player ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Player ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_PlayerEnabled = Value
+            ShowToggleNotification("Player ESP", Value)
+            if not Value then
+                clearPlayerESP()
+            end
+        end
+    })
+
+    -- 2. Chests ESP セクション
+    ESPTab:AddSection({
+        Name = getGradientText("Chests ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Chests ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_ChestsEnabled = Value
+            ShowToggleNotification("Chests ESP", Value)
+            if not Value then
+                clearChestsESP()
+            end
+        end
+    })
+
+    -- 3. Debris & Materials ESP セクション
     ESPTab:AddSection({
         Name = getGradientText("Debris & Materials ESP", emeraldGreen, shinySilver)
     })
@@ -419,7 +576,7 @@ if ESPTab then
         end
     })
 
-    -- 食べ物・消耗品系セクション
+    -- 4. Food & Consumables ESP セクション
     ESPTab:AddSection({
         Name = getGradientText("Food & Consumables ESP", emeraldGreen, shinySilver)
     })
@@ -447,22 +604,109 @@ if ESPTab then
     })
 end
 
--- バックグラウンド完全自動スキャン (2秒間隔)
+-- ==========================================
+-- ★ ConfigTab (Settings) 通知設定構築 ★
+-- ==========================================
+if ConfigTab then
+    ConfigTab:AddSection({
+        Name = getGradientText("Notification Settings", emeraldGreen, shinySilver)
+    })
+
+    ConfigTab:AddToggle({
+        Name = "Enable Notifications",
+        Default = true,
+        Callback = function(Value)
+            NotificationsEnabled = Value
+            if Value then
+                Notify("Notifications", "Notifications are now ENABLED", "Yes")
+            end
+        end
+    })
+
+    ConfigTab:AddSlider({
+        Name = "Notification Duration",
+        Min = 1,
+        Max = 10,
+        Default = 4,
+        Color = emeraldGreen,
+        Increment = 1,
+        ValueName = "sec",
+        Callback = function(Value)
+            NotificationSettings.Time = Value
+        end
+    })
+
+    ConfigTab:AddSlider({
+        Name = "Notification Volume",
+        Min = 0,
+        Max = 1,
+        Default = 1,
+        Color = emeraldGreen,
+        Increment = 0.1,
+        ValueName = "Vol",
+        Callback = function(Value)
+            NotificationSettings.Volume = Value
+        end
+    })
+end
+
+-- バックグラウンド全自動スキャン (2秒間隔)
 task.spawn(function()
     while task.wait(2) do
         scanAndRefreshDropdowns()
     end
 end)
 
--- ESPメイン更新ループ
+-- ESP メイン描画・距離更新ループ
 task.spawn(function()
     while task.wait(0.3) do
+        local character = LocalPlayer.Character
+        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+        -- 1. Player ESP 更新
+        if ESP_PlayerEnabled then
+            for _, plr in ipairs(service.Players:GetPlayers()) do
+                if plr ~= LocalPlayer and plr.Character then
+                    if not PlayerESPContainer[plr] or not PlayerESPContainer[plr].Highlight.Parent then
+                        createPlayerESP(plr)
+                    end
+
+                    local espData = PlayerESPContainer[plr]
+                    if espData and espData.Label and espData.Root and espData.Humanoid and rootPart then
+                        local dist = math.round((rootPart.Position - espData.Root.Position).Magnitude)
+                        local hpPct = math.round((espData.Humanoid.Health / math.max(1, espData.Humanoid.MaxHealth)) * 100)
+                        espData.Label.Text = string.format("%s [%dm] [%d%%]", plr.DisplayName or plr.Name, dist, hpPct)
+                    end
+                end
+            end
+        else
+            if next(PlayerESPContainer) then clearPlayerESP() end
+        end
+
+        -- 2. Chests ESP 更新
+        if ESP_ChestsEnabled then
+            local chestsFolder = workspace:FindFirstChild("Chests")
+            if chestsFolder then
+                for _, model in ipairs(chestsFolder:GetChildren()) do
+                    if not ChestsESPContainer[model] then
+                        createChestESP(model)
+                    end
+
+                    local espData = ChestsESPContainer[model]
+                    if espData and espData.Label and espData.Part and rootPart then
+                        local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
+                        espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                    end
+                end
+            end
+        else
+            if next(ChestsESPContainer) then clearChestsESP() end
+        end
+
+        -- 3. Debris & Food ESP 更新
         if ESP_MaterialsEnabled or ESP_FoodEnabled then
             local debrisFolder = workspace:FindFirstChild("DebrisField")
             if debrisFolder then
-                local character = LocalPlayer.Character
-                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-
                 for _, model in ipairs(debrisFolder:GetChildren()) do
                     if not DebrisESPContainer[model] then
                         createDebrisESP(model)
@@ -492,9 +736,7 @@ task.spawn(function()
                 end
             end
         else
-            if next(DebrisESPContainer) then
-                clearDebrisESP()
-            end
+            if next(DebrisESPContainer) then clearDebrisESP() end
         end
     end
 end)
