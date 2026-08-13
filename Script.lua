@@ -32,6 +32,30 @@ local function getGradientText(text, startColor, endColor)
     return result
 end
 
+-- 日本語などの外国語テキストを自動で英語に翻訳する関数
+local function translateToEnglish(text)
+    if not text or text == "" or text == "Loading..." then return text end
+    
+    -- 英語・半角英数字のみの場合は翻訳リクエストをスキップ
+    if not text:find("[^\1-\127]") then
+        return text
+    end
+    
+    local success, res = pcall(function()
+        local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=" .. service.HttpService:UrlEncode(text)
+        local response = game:HttpGet(url)
+        local decoded = service.HttpService:JSONDecode(response)
+        if decoded and decoded[1] and decoded[1][1] and decoded[1][1][1] then
+            return decoded[1][1][1]
+        end
+    end)
+    
+    if success and res and res ~= "" then
+        return res
+    end
+    return text
+end
+
 local NotificationSettings={
     EnableImage="rbxassetid://14562122532",
     DisableImage="rbxassetid://17829927053",
@@ -142,7 +166,8 @@ end
 local gameName = "Loading..."
 task.spawn(function()
     pcall(function()
-        gameName = service.MarketplaceService:GetProductInfo(game.PlaceId).Name
+        local rawName = service.MarketplaceService:GetProductInfo(game.PlaceId).Name
+        gameName = translateToEnglish(rawName) -- 日本語名を自動的に英語へ翻訳
     end)
 end)
 
@@ -172,7 +197,6 @@ InfoTab:AddSection({Name = getGradientText("Session Statistics", emeraldGreen, s
 
 local StatsParagraph = InfoTab:AddParagraph(getGradientText("Live Metrics", emeraldGreen, shinySilver), "Calculating session metrics...")
 
--- 上書き問題を解決する直接更新関数
 local function UpdateStatsParagraph(paragraphObj, newTitleText, newContentText)
     if not paragraphObj then return end
     
@@ -204,7 +228,6 @@ local function UpdateStatsParagraph(paragraphObj, newTitleText, newContentText)
         end
     end
 
-    -- フォールバック（CoreGuiからの探索）
     local CoreGui = (gethui and gethui()) or game:GetService("CoreGui")
     local OrionGui = CoreGui:FindFirstChild("OrionBliz")
     if OrionGui then
@@ -273,7 +296,7 @@ end)
 
 if successApi and result and result.guild then
     local guild = result.guild
-    local guildName = guild.name
+    local guildName = translateToEnglish(guild.name) -- Guild名も英語に自動翻訳
     local memberCount = tostring(result.approximate_member_count or "---")
     local onlineCount = tostring(result.approximate_presence_count or "---")
     
