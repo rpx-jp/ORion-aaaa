@@ -172,14 +172,41 @@ local fps = 0
 local emeraldGreen = Color3.fromRGB(0, 220, 150)
 local shinySilver  = Color3.fromRGB(240, 245, 255)
 
+-- 未判定アイテム用謝罪メッセージ
+local UNKNOWN_ITEM_MSG = "(Sorry... I'm a solo scripter, so it took too much time to support so many items and I couldn't finish it. Sorry 🥺💦)"
+
+-- 食べ物キーワード判定リスト
+local foodKeywords = {
+    "sushi", "stew", "potato", "biscuit", "orange", "apple", "bread",
+    "meat", "fish", "fruit", "food", "drink", "water", "cheese", "cake",
+    "pie", "soup", "carrot", "berry", "banana", "corn", "rice"
+}
+
+local function isFoodItem(name)
+    if not name or name == "" or name == UNKNOWN_ITEM_MSG then return false end
+    local lowerName = name:lower()
+    for _, kw in ipairs(foodKeywords) do
+        if lowerName:find(kw) then
+            return true
+        end
+    end
+    return false
+end
+
 -- ==========================================
--- ★ DebrisField ESP & 確実なドロップダウン更新 ★
+-- ★ 素材／食べ物 分離ESPシステム ★
 -- ==========================================
-local ESP_DebrisEnabled = false
-local selectedFilterItem = "All Items"
-local debrisItemsList = {"All Items"}
+local ESP_MaterialsEnabled = false
+local selectedMaterialItem = "All Materials"
+local materialsList = {"All Materials"}
+
+local ESP_FoodEnabled = false
+local selectedFoodItem = "All Foods"
+local foodList = {"All Foods"}
+
 local DebrisESPContainer = {}
-local DebrisDropdown = nil
+local MaterialDropdown = nil
+local FoodDropdown = nil
 
 local function clearDebrisESP()
     for model, elements in pairs(DebrisESPContainer) do
@@ -189,35 +216,54 @@ local function clearDebrisESP()
     table.clear(DebrisESPContainer)
 end
 
+-- モデル内部名判定（数字のみのものは謝罪メッセージに置換）
 local function getModelMeshName(model)
     for _, desc in ipairs(model:GetDescendants()) do
         if desc:IsA("MeshPart") or desc:IsA("SpecialMesh") then
-            if desc.Name ~= "" and desc.Name ~= "Part" and desc.Name ~= "Mesh" then
+            if desc.Name ~= "" and desc.Name ~= "Part" and desc.Name ~= "Mesh" and not desc.Name:match("^%-?%d+$") then
                 return desc.Name
             end
         end
     end
+    
+    if model.Name:match("^%-?%d+$") or tonumber(model.Name) then
+        return UNKNOWN_ITEM_MSG
+    end
+
     return model.Name
 end
 
 local function createDebrisESP(model)
-    if not ESP_DebrisEnabled then return end
+    if not (ESP_MaterialsEnabled or ESP_FoodEnabled) then return end
     if DebrisESPContainer[model] then return end
 
     local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
     if not primaryPart then return end
 
     local displayName = getModelMeshName(model)
+    local isFood = isFoodItem(displayName)
+
+    -- 可視性判定
+    local isVisible = false
+    if isFood then
+        if ESP_FoodEnabled then
+            isVisible = (selectedFoodItem == "All Foods" or selectedFoodItem == displayName)
+        end
+    else
+        if ESP_MaterialsEnabled then
+            isVisible = (selectedMaterialItem == "All Materials" or selectedMaterialItem == displayName)
+        end
+    end
 
     -- Highlight (外形発光線)
     local highlight = Instance.new("Highlight")
     highlight.Name = "Xunzn_DebrisHighlight"
     highlight.Adornee = model
-    highlight.FillColor = Color3.fromRGB(0, 220, 150)
+    highlight.FillColor = isFood and Color3.fromRGB(255, 170, 0) or Color3.fromRGB(0, 220, 150)
     highlight.FillTransparency = 0.65
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
-    highlight.Enabled = (selectedFilterItem == "All Items" or selectedFilterItem == displayName)
+    highlight.Enabled = isVisible
     highlight.Parent = primaryPart
 
     -- BillboardGui (ネームタグ)
@@ -227,13 +273,13 @@ local function createDebrisESP(model)
     billboard.Size = UDim2.new(0, 160, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 2.5, 0)
     billboard.AlwaysOnTop = true
-    billboard.Enabled = (selectedFilterItem == "All Items" or selectedFilterItem == displayName)
+    billboard.Enabled = isVisible
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Parent = billboard
     nameLabel.Size = UDim2.new(1, 0, 1, 0)
     nameLabel.BackgroundTransparency = 1
-    nameLabel.TextColor3 = Color3.fromRGB(0, 255, 180)
+    nameLabel.TextColor3 = isFood and Color3.fromRGB(255, 200, 50) or Color3.fromRGB(0, 255, 180)
     nameLabel.TextStrokeTransparency = 0
     nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     nameLabel.Font = Enum.Font.SourceSansBold
@@ -247,117 +293,171 @@ local function createDebrisESP(model)
         Billboard = billboard,
         Label = nameLabel,
         Part = primaryPart,
-        DisplayName = displayName
+        DisplayName = displayName,
+        IsFood = isFood
     }
 end
 
--- 「All Items」を絶対に先頭保持する安全なスキャン・リフレッシュ処理
-local function scanAndRefreshDropdown(manualNotify)
+-- 完全全自動スキャン＆カテゴリ別ドロップダウン自動更新関数
+local function scanAndRefreshDropdowns()
     local debrisFolder = workspace:FindFirstChild("DebrisField")
-    local foundNamesMap = {}
-    local currentUniqueNames = {}
+    local foundMaterialsMap = {}
+    local foundFoodsMap = {}
+    local currentMaterials = {}
+    local currentFoods = {}
 
     if debrisFolder then
         for _, model in ipairs(debrisFolder:GetChildren()) do
             local name = getModelMeshName(model)
-            if name and not foundNamesMap[name] then
-                foundNamesMap[name] = true
-                table.insert(currentUniqueNames, name)
+            if name then
+                if isFoodItem(name) then
+                    if not foundFoodsMap[name] then
+                        foundFoodsMap[name] = true
+                        table.insert(currentFoods, name)
+                    end
+                else
+                    if not foundMaterialsMap[name] then
+                        foundMaterialsMap[name] = true
+                        table.insert(currentMaterials, name)
+                    end
+                end
             end
         end
     end
 
-    table.sort(currentUniqueNames)
+    table.sort(currentMaterials, function(a, b)
+        if a == UNKNOWN_ITEM_MSG then return false end
+        if b == UNKNOWN_ITEM_MSG then return true end
+        return a < b
+    end)
 
-    -- 必ず1番目に "All Items" を配置
-    local newList = {"All Items"}
-    for _, name in ipairs(currentUniqueNames) do
-        table.insert(newList, name)
+    table.sort(currentFoods)
+
+    -- Materials リスト生成
+    local newMatList = {"All Materials"}
+    for _, name in ipairs(currentMaterials) do
+        table.insert(newMatList, name)
     end
 
-    -- リストに変更があるか確認
-    local listChanged = (#newList ~= #debrisItemsList)
-    if not listChanged then
-        for i = 1, #newList do
-            if newList[i] ~= debrisItemsList[i] then
-                listChanged = true
+    -- Food リスト生成
+    local newFoodList = {"All Foods"}
+    for _, name in ipairs(currentFoods) do
+        table.insert(newFoodList, name)
+    end
+
+    -- Materials 変化チェック
+    local matChanged = (#newMatList ~= #materialsList)
+    if not matChanged then
+        for i = 1, #newMatList do
+            if newMatList[i] ~= materialsList[i] then
+                matChanged = true
                 break
             end
         end
     end
 
-    if listChanged or manualNotify then
-        debrisItemsList = newList
-
-        if DebrisDropdown then
-            local currentVal = selectedFilterItem or "All Items"
-            DebrisDropdown:Refresh(debrisItemsList, true)
-            pcall(function()
-                DebrisDropdown:Set(currentVal)
-            end)
+    -- Food 変化チェック
+    local foodChanged = (#newFoodList ~= #foodList)
+    if not foodChanged then
+        for i = 1, #newFoodList do
+            if newFoodList[i] ~= foodList[i] then
+                foodChanged = true
+                break
+            end
         end
+    end
 
-        if listChanged and not manualNotify then
-            Notify("Items Refreshed", "Updated item list in dropdown!", "Check")
-        elseif manualNotify then
-            Notify("Items Scanned", "Found " .. tostring(#debrisItemsList - 1) .. " item types!", "Yes")
+    if matChanged then
+        materialsList = newMatList
+        if MaterialDropdown then
+            local cur = selectedMaterialItem or "All Materials"
+            MaterialDropdown:Refresh(materialsList, true)
+            pcall(function() MaterialDropdown:Set(cur) end)
         end
+    end
+
+    if foodChanged then
+        foodList = newFoodList
+        if FoodDropdown then
+            local cur = selectedFoodItem or "All Foods"
+            FoodDropdown:Refresh(foodList, true)
+            pcall(function() FoodDropdown:Set(cur) end)
+        end
+    end
+
+    if matChanged or foodChanged then
+        Notify("Items Discovered", "Automatically updated Material and Food ESP lists!", "Check")
     end
 end
 
--- ESPTab UI 構築
+-- ESPTab 内 UI 構築 (カテゴリ分け)
 if ESPTab then
+    -- 素材・パーツ系セクション
     ESPTab:AddSection({
-        Name = getGradientText("DebrisField Detector & Filter", emeraldGreen, shinySilver)
+        Name = getGradientText("Debris & Materials ESP", emeraldGreen, shinySilver)
     })
 
     ESPTab:AddToggle({
-        Name = "Enable DebrisField ESP",
+        Name = "Enable Materials ESP",
         Default = false,
         Callback = function(Value)
-            ESP_DebrisEnabled = Value
-            ShowToggleNotification("DebrisField ESP", Value)
-            if not Value then
+            ESP_MaterialsEnabled = Value
+            ShowToggleNotification("Materials ESP", Value)
+            if not Value and not ESP_FoodEnabled then
                 clearDebrisESP()
             end
         end
     })
 
-    DebrisDropdown = ESPTab:AddDropdown({
-        Name = "Filter Target Item",
-        Default = "All Items",
-        Options = debrisItemsList,
+    MaterialDropdown = ESPTab:AddDropdown({
+        Name = "Filter Material Item",
+        Default = "All Materials",
+        Options = materialsList,
         Callback = function(Value)
-            selectedFilterItem = Value
-            ShowNotification("Item Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
-            
-            for model, elements in pairs(DebrisESPContainer) do
-                local visible = (selectedFilterItem == "All Items" or elements.DisplayName == selectedFilterItem)
-                if elements.Highlight then elements.Highlight.Enabled = visible end
-                if elements.Billboard then elements.Billboard.Enabled = visible end
+            selectedMaterialItem = Value
+            ShowNotification("Material Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    -- 食べ物・消耗品系セクション
+    ESPTab:AddSection({
+        Name = getGradientText("Food & Consumables ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Food ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_FoodEnabled = Value
+            ShowToggleNotification("Food ESP", Value)
+            if not Value and not ESP_MaterialsEnabled then
+                clearDebrisESP()
             end
         end
     })
 
-    ESPTab:AddButton({
-        Name = "Manual Scan & Refresh",
-        Callback = function()
-            scanAndRefreshDropdown(true)
+    FoodDropdown = ESPTab:AddDropdown({
+        Name = "Filter Food Item",
+        Default = "All Foods",
+        Options = foodList,
+        Callback = function(Value)
+            selectedFoodItem = Value
+            ShowNotification("Food Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
         end
     })
 end
 
--- バックグラウンド自動スキャン
+-- バックグラウンド完全自動スキャン (2秒間隔)
 task.spawn(function()
     while task.wait(2) do
-        scanAndRefreshDropdown(false)
+        scanAndRefreshDropdowns()
     end
 end)
 
 -- ESPメイン更新ループ
 task.spawn(function()
     while task.wait(0.3) do
-        if ESP_DebrisEnabled then
+        if ESP_MaterialsEnabled or ESP_FoodEnabled then
             local debrisFolder = workspace:FindFirstChild("DebrisField")
             if debrisFolder then
                 local character = LocalPlayer.Character
@@ -370,7 +470,17 @@ task.spawn(function()
                     
                     local espData = DebrisESPContainer[model]
                     if espData and espData.Label and espData.Part and rootPart then
-                        local isVisible = (selectedFilterItem == "All Items" or espData.DisplayName == selectedFilterItem)
+                        local isVisible = false
+                        if espData.IsFood then
+                            if ESP_FoodEnabled then
+                                isVisible = (selectedFoodItem == "All Foods" or selectedFoodItem == espData.DisplayName)
+                            end
+                        else
+                            if ESP_MaterialsEnabled then
+                                isVisible = (selectedMaterialItem == "All Materials" or selectedMaterialItem == espData.DisplayName)
+                            end
+                        end
+
                         if espData.Highlight then espData.Highlight.Enabled = isVisible end
                         if espData.Billboard then espData.Billboard.Enabled = isVisible end
 
