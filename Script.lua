@@ -174,6 +174,25 @@ local function getModelMeshName(model)
     return model.Name
 end
 
+-- ドロップダウンの文字見切れ(...)防止・表示補正ヘルパー関数
+local function FixDropdownDisplay(dropdownObj, selectedValue)
+    if not dropdownObj then return end
+    pcall(function()
+        local frame = dropdownObj.Frame or dropdownObj.Instance
+        if frame then
+            for _, desc in ipairs(frame:GetDescendants()) do
+                if desc:IsA("TextLabel") then
+                    desc.TextTruncate = Enum.TextTruncate.None
+                    desc.ClipsDescendants = false
+                    if desc.Name == "Value" or desc.Name == "Selected" or desc.Text == "..." then
+                        desc.Text = tostring(selectedValue)
+                    end
+                end
+            end
+        end
+    end)
+end
+
 local function createDebrisESP(model)
     if not ESP_DebrisEnabled then return end
     if DebrisESPContainer[model] then return end
@@ -250,13 +269,13 @@ local function scanAndRefreshDropdown(manualNotify)
 
         if DebrisDropdown then
             local currentVal = selectedFilterItem
-            -- ドロップダウンのリフレッシュ
             DebrisDropdown:Refresh(debrisItemsList, true)
             DebrisDropdown:Set(currentVal)
+            FixDropdownDisplay(DebrisDropdown, currentVal)
         end
 
         if foundNew then
-            Notify("New Item Discovered", "Added new item(s) to ESP dropdown!", "Check")
+            Notify("New Item Discovered", "Updated ESP dropdown list!", "Check")
         elseif manualNotify then
             Notify("Items Scanned", "Found " .. tostring(#debrisItemsList - 1) .. " item types!", "Yes")
         end
@@ -287,6 +306,7 @@ if ESPTab then
         Options = debrisItemsList,
         Callback = function(Value)
             selectedFilterItem = Value
+            FixDropdownDisplay(DebrisDropdown, Value)
             ShowNotification("Item Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
             
             for model, elements in pairs(DebrisESPContainer) do
@@ -369,19 +389,11 @@ task.spawn(function()
     end)
 end)
 
--- ShiftLock検出通知
+-- ★ ShiftLock検出通知（Notify関数でシンプル表示に統一） ★
 task.spawn(function()
     task.wait(1.5)
     if LocalPlayer.DevEnableMouseLock then
-        OrionLib:MakeNotification({
-            Name = "ShiftLock Notice",
-            Content = "ShiftLock is enabled in this server. RightShift GUI keybind may not work.",
-            Image = "rbxassetid://4384403532",
-            Time = 6,
-            AccentColor = Color3.fromRGB(100, 150, 255),
-            Glassmorphism = true,
-            FluidMotion = true
-        })
+        Notify("ShiftLock Notice", "ShiftLock is enabled in this server. RightShift keybind may be affected.", "Check")
     end
 end)
 
@@ -560,6 +572,7 @@ InfoTab:AddButton({
     end
 })
 
+-- UI装飾・文字見切れ(...)一括調整ループ
 task.spawn(function()
     local CoreGui = (gethui and gethui()) or game:GetService("CoreGui")
     local TweenService = game:GetService("TweenService")
@@ -582,6 +595,8 @@ task.spawn(function()
         if badGradient then badGradient:Destroy() end
         if desc:IsA("TextLabel") then
             desc.RichText = true
+            -- UI全般の文字見切れ(...)を自動防止
+            desc.TextTruncate = Enum.TextTruncate.None
         end
     end
 
