@@ -32,13 +32,10 @@ local function getGradientText(text, startColor, endColor)
     return result
 end
 
--- 日本語などの外国語テキストを自動で英語に翻訳する関数
+-- 外国語自動翻訳関数
 local function translateToEnglish(text)
     if not text or text == "" or text == "Loading..." then return text end
-    
-    if not text:find("[^\1-\127]") then
-        return text
-    end
+    if not text:find("[^\1-\127]") then return text end
     
     local success, res = pcall(function()
         local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=" .. service.HttpService:UrlEncode(text)
@@ -49,9 +46,7 @@ local function translateToEnglish(text)
         end
     end)
     
-    if success and res and res ~= "" then
-        return res
-    end
+    if success and res and res ~= "" then return res end
     return text
 end
 
@@ -122,13 +117,14 @@ else
     Window:MakeTabGroup({ Name = "Others", Title = "Others" })
 end
 
+local ObjectTab
 if not isLobby then
     local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
     local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
     local PlayerTab = Window:MakeTab({Name = "Player", Icon = "user", Group = "Main", PremiumOnly = false})
     local ESPTab = Window:MakeTab({Name = "ESP", Icon = "eye", Group = "Main", PremiumOnly = false})
     local TeleportTab = Window:MakeTab({Name = "Teleport", Icon = "footprints", Group = "Main", PremiumOnly = false})
-    local ObjectTab = Window:MakeTab({Name = "Objects", Icon = "rbxassetid://105880397565283", Group = "Main", PremiumOnly = false})
+    ObjectTab = Window:MakeTab({Name = "Objects", Icon = "rbxassetid://105880397565283", Group = "Main", PremiumOnly = false})
     local KeybindsTab = Window:MakeTab({Name = "Keybinds", Icon = "keyboard", Group = "Main", PremiumOnly = false})
     local AutoTab = Window:MakeTab({Name = "Automation", Icon = "infinity", Group = "Main", PremiumOnly = false})
 end
@@ -149,6 +145,126 @@ local fps = 0
 local emeraldGreen = Color3.fromRGB(0, 220, 150)
 local shinySilver  = Color3.fromRGB(240, 245, 255)
 
+-- ==========================================
+-- ★ DebrisField ESP システム構築部分 ★
+-- ==========================================
+local ESP_DebrisEnabled = false
+local DebrisESPContainer = {}
+
+local function clearDebrisESP()
+    for model, elements in pairs(DebrisESPContainer) do
+        if elements.Highlight then elements.Highlight:Destroy() end
+        if elements.Billboard then elements.Billboard:Destroy() end
+    end
+    table.clear(DebrisESPContainer)
+end
+
+local function getModelMeshName(model)
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("MeshPart") or desc:IsA("SpecialMesh") then
+            if desc.Name ~= "" and desc.Name ~= "Part" and desc.Name ~= "Mesh" then
+                return desc.Name
+            end
+        end
+    end
+    return model.Name
+end
+
+local function createDebrisESP(model)
+    if not ESP_DebrisEnabled then return end
+    if DebrisESPContainer[model] then return end
+
+    local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
+    if not primaryPart then return end
+
+    local displayName = getModelMeshName(model)
+
+    -- Highlight (外形発光線)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Xunzn_DebrisHighlight"
+    highlight.Adornee = model
+    highlight.FillColor = Color3.fromRGB(0, 220, 150)
+    highlight.FillTransparency = 0.65
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.Parent = primaryPart
+
+    -- BillboardGui (名前・距離ネームタグ)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Xunzn_DebrisBillboard"
+    billboard.Adornee = primaryPart
+    billboard.Size = UDim2.new(0, 160, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.AlwaysOnTop = true
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Parent = billboard
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(0, 255, 180)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextSize = 14
+    nameLabel.Text = displayName
+
+    billboard.Parent = primaryPart
+
+    DebrisESPContainer[model] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        Label = nameLabel,
+        Part = primaryPart,
+        DisplayName = displayName
+    }
+end
+
+-- ESPループ（距離のリアルタイム更新）
+task.spawn(function()
+    while task.wait(0.3) do
+        if ESP_DebrisEnabled then
+            local debrisFolder = workspace:FindFirstChild("DebrisField")
+            if debrisFolder then
+                local character = LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+                for _, model in ipairs(debrisFolder:GetChildren()) do
+                    if not DebrisESPContainer[model] then
+                        createDebrisESP(model)
+                    end
+                    
+                    local espData = DebrisESPContainer[model]
+                    if espData and espData.Label and espData.Part and rootPart then
+                        local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
+                        espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                    end
+                end
+            end
+        else
+            if next(DebrisESPContainer) then
+                clearDebrisESP()
+            end
+        end
+    end
+end)
+
+-- ObjectsタブにESPトグルボタンを追加
+if ObjectTab then
+    ObjectTab:AddSection({Name = getGradientText("DebrisField Detector", emeraldGreen, shinySilver)})
+    ObjectTab:AddToggle({
+        Name = "DebrisField Items ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_DebrisEnabled = Value
+            ShowToggleNotification("DebrisField ESP", Value)
+            if not Value then
+                clearDebrisESP()
+            end
+        end
+    })
+end
+
+-- FPS計測
 do
     local frames = 0
     local last = os.clock()
@@ -170,9 +286,9 @@ task.spawn(function()
     end)
 end)
 
--- ★ ShiftLock検出 & 通知処理 ★
+-- ShiftLock検出通知
 task.spawn(function()
-    task.wait(1.5) -- GUI起動完了まで少し待機
+    task.wait(1.5)
     if LocalPlayer.DevEnableMouseLock then
         OrionLib:MakeNotification({
             Name = "ShiftLock Notice",
