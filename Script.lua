@@ -127,7 +127,7 @@ local InfoTab = Window:MakeTab({Name = "Information", Icon = "info", Group = "Ot
 
 if not isLobby then
     local MiscTab = Window:MakeTab({Name = "Misc", Icon = "box", Group = "Others", PremiumOnly = false})
-    local DiscordServerTab = Window:MakeTab({Name = "Discord Server", Icon = "rbxassetid://16570630989", Group = "Others", PremiumOnly = false})
+    local DiscordServerTab = Window:MakeTab({Name = "Discord Server", Icon = "rbxassetid://12058969055", Group = "Others", PremiumOnly = false})
     local ConfigTab = Window:MakeTab({Name = "Settings", Icon = "settings", Group = "Others", PremiumOnly = false})
     local PremiumInfoTab = Window:MakeTab({Name = "Premium Info", Icon = "crown", Group = "Others", PremiumOnly = false})
     local CreditsTab = Window:MakeTab({Name = "Credits", Icon = "user-round-check", Group = "Others", PremiumOnly = false})
@@ -240,7 +240,7 @@ if successApi and result and result.guild then
     )
 end
 
-InfoTab:AddImageParagraph("rbxassetid://16570630989", discordDesc)
+InfoTab:AddImageParagraph("rbxassetid://12058969055", discordDesc)
 
 InfoTab:AddButton({
     Name = "Copy & Join Discord",
