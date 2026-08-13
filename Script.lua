@@ -210,7 +210,21 @@ local chestsList = {"All Chests"}
 local ChestsESPContainer = {}
 local ChestDropdown = nil
 
--- 3. Debris & Food ESP
+-- 3. Islands ESP (新機能: workspace.IslandContainer)
+local ESP_IslandsEnabled = false
+local selectedIslandItem = "All Islands"
+local islandsList = {"All Islands"}
+local IslandsESPContainer = {}
+local IslandDropdown = nil
+
+-- 4. Creatures / Enemies ESP (新機能: workspace.CreatureContainer)
+local ESP_CreaturesEnabled = false
+local selectedCreatureItem = "All Creatures"
+local creaturesList = {"All Creatures"}
+local CreaturesESPContainer = {}
+local CreatureDropdown = nil
+
+-- 5. Debris & Food ESP
 local ESP_MaterialsEnabled = false
 local selectedMaterialItem = "All Materials"
 local materialsList = {"All Materials"}
@@ -238,6 +252,22 @@ local function clearChestsESP()
         if elements.Billboard then elements.Billboard:Destroy() end
     end
     table.clear(ChestsESPContainer)
+end
+
+local function clearIslandsESP()
+    for model, elements in pairs(IslandsESPContainer) do
+        if elements.Highlight then elements.Highlight:Destroy() end
+        if elements.Billboard then elements.Billboard:Destroy() end
+    end
+    table.clear(IslandsESPContainer)
+end
+
+local function clearCreaturesESP()
+    for model, elements in pairs(CreaturesESPContainer) do
+        if elements.Highlight then elements.Highlight:Destroy() end
+        if elements.Billboard then elements.Billboard:Destroy() end
+    end
+    table.clear(CreaturesESPContainer)
 end
 
 local function clearDebrisESP()
@@ -350,6 +380,106 @@ local function createChestESP(model)
         Billboard = billboard,
         Label = nameLabel,
         Part = primaryPart,
+        DisplayName = displayName
+    }
+end
+
+local function createIslandESP(model)
+    if not ESP_IslandsEnabled then return end
+    if IslandsESPContainer[model] then return end
+
+    local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
+    if not primaryPart then return end
+
+    local displayName = model.Name
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Xunzn_IslandHighlight"
+    highlight.Adornee = model
+    highlight.FillColor = Color3.fromRGB(0, 180, 255)
+    highlight.FillTransparency = 0.7
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = (selectedIslandItem == "All Islands" or selectedIslandItem == displayName)
+    highlight.Parent = primaryPart
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Xunzn_IslandBillboard"
+    billboard.Adornee = primaryPart
+    billboard.Size = UDim2.new(0, 180, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Enabled = (selectedIslandItem == "All Islands" or selectedIslandItem == displayName)
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Parent = billboard
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(0, 210, 255)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextSize = 15
+    nameLabel.Text = displayName
+
+    billboard.Parent = primaryPart
+
+    IslandsESPContainer[model] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        Label = nameLabel,
+        Part = primaryPart,
+        DisplayName = displayName
+    }
+end
+
+local function createCreatureESP(model)
+    if not ESP_CreaturesEnabled then return end
+    if CreaturesESPContainer[model] then return end
+
+    local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
+    if not primaryPart then return end
+
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    local displayName = model.Name
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Xunzn_CreatureHighlight"
+    highlight.Adornee = model
+    highlight.FillColor = Color3.fromRGB(220, 0, 220)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = (selectedCreatureItem == "All Creatures" or selectedCreatureItem == displayName)
+    highlight.Parent = primaryPart
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Xunzn_CreatureBillboard"
+    billboard.Adornee = primaryPart
+    billboard.Size = UDim2.new(0, 170, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Enabled = (selectedCreatureItem == "All Creatures" or selectedCreatureItem == displayName)
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Parent = billboard
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextSize = 14
+    nameLabel.Text = displayName
+
+    billboard.Parent = primaryPart
+
+    CreaturesESPContainer[model] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        Label = nameLabel,
+        Part = primaryPart,
+        Humanoid = humanoid,
         DisplayName = displayName
     }
 end
@@ -490,7 +620,71 @@ local function scanAndRefreshDropdowns()
         end
     end
 
-    -- 3. Debris & Food スキャン
+    -- 3. Islands スキャン (workspace.IslandContainer)
+    local islandsFolder = workspace:FindFirstChild("IslandContainer")
+    local foundIslandsMap = {}
+    local currentIslands = {}
+    if islandsFolder then
+        for _, model in ipairs(islandsFolder:GetChildren()) do
+            local iName = model.Name
+            if iName and not foundIslandsMap[iName] then
+                foundIslandsMap[iName] = true
+                table.insert(currentIslands, iName)
+            end
+        end
+    end
+    table.sort(currentIslands)
+    local newIslandList = {"All Islands"}
+    for _, iName in ipairs(currentIslands) do table.insert(newIslandList, iName) end
+
+    local islandChanged = (#newIslandList ~= #islandsList)
+    if not islandChanged then
+        for i = 1, #newIslandList do
+            if newIslandList[i] ~= islandsList[i] then islandChanged = true; break end
+        end
+    end
+    if islandChanged then
+        islandsList = newIslandList
+        if IslandDropdown then
+            local cur = selectedIslandItem or "All Islands"
+            IslandDropdown:Refresh(islandsList, true)
+            pcall(function() IslandDropdown:Set(cur) end)
+        end
+    end
+
+    -- 4. Creatures スキャン (workspace.CreatureContainer)
+    local creaturesFolder = workspace:FindFirstChild("CreatureContainer")
+    local foundCreaturesMap = {}
+    local currentCreatures = {}
+    if creaturesFolder then
+        for _, model in ipairs(creaturesFolder:GetChildren()) do
+            local crName = model.Name
+            if crName and not foundCreaturesMap[crName] then
+                foundCreaturesMap[crName] = true
+                table.insert(currentCreatures, crName)
+            end
+        end
+    end
+    table.sort(currentCreatures)
+    local newCreatureList = {"All Creatures"}
+    for _, crName in ipairs(currentCreatures) do table.insert(newCreatureList, crName) end
+
+    local creatureChanged = (#newCreatureList ~= #creaturesList)
+    if not creatureChanged then
+        for i = 1, #newCreatureList do
+            if newCreatureList[i] ~= creaturesList[i] then creatureChanged = true; break end
+        end
+    end
+    if creatureChanged then
+        creaturesList = newCreatureList
+        if CreatureDropdown then
+            local cur = selectedCreatureItem or "All Creatures"
+            CreatureDropdown:Refresh(creaturesList, true)
+            pcall(function() CreatureDropdown:Set(cur) end)
+        end
+    end
+
+    -- 5. Debris & Food スキャン
     local debrisFolder = workspace:FindFirstChild("DebrisField")
     local foundMaterialsMap = {}
     local foundFoodsMap = {}
@@ -616,7 +810,57 @@ if ESPTab then
         end
     })
 
-    -- 3. Debris & Materials ESP
+    -- 3. Islands ESP (新機能: workspace.IslandContainer)
+    ESPTab:AddSection({
+        Name = getGradientText("Islands ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Islands ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_IslandsEnabled = Value
+            ShowToggleNotification("Islands ESP", Value)
+            if not Value then clearIslandsESP() end
+        end
+    })
+
+    IslandDropdown = ESPTab:AddDropdown({
+        Name = "Filter Target Island",
+        Default = "All Islands",
+        Options = islandsList,
+        Callback = function(Value)
+            selectedIslandItem = Value
+            ShowNotification("Island Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    -- 4. Creatures / Enemies ESP (新機能: workspace.CreatureContainer)
+    ESPTab:AddSection({
+        Name = getGradientText("Creatures ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Creatures ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_CreaturesEnabled = Value
+            ShowToggleNotification("Creatures ESP", Value)
+            if not Value then clearCreaturesESP() end
+        end
+    })
+
+    CreatureDropdown = ESPTab:AddDropdown({
+        Name = "Filter Target Creature",
+        Default = "All Creatures",
+        Options = creaturesList,
+        Callback = function(Value)
+            selectedCreatureItem = Value
+            ShowNotification("Creature Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    -- 5. Debris & Materials ESP
     ESPTab:AddSection({
         Name = getGradientText("Debris & Materials ESP", emeraldGreen, shinySilver)
     })
@@ -641,7 +885,7 @@ if ESPTab then
         end
     })
 
-    -- 4. Food & Consumables ESP
+    -- 6. Food & Consumables ESP
     ESPTab:AddSection({
         Name = getGradientText("Food & Consumables ESP", emeraldGreen, shinySilver)
     })
@@ -778,7 +1022,64 @@ task.spawn(function()
             if next(ChestsESPContainer) then clearChestsESP() end
         end
 
-        -- 3. Debris & Food ESP 更新
+        -- 3. Islands ESP 更新 (workspace.IslandContainer)
+        if ESP_IslandsEnabled then
+            local islandsFolder = workspace:FindFirstChild("IslandContainer")
+            if islandsFolder then
+                for _, model in ipairs(islandsFolder:GetChildren()) do
+                    if not IslandsESPContainer[model] then
+                        createIslandESP(model)
+                    end
+
+                    local espData = IslandsESPContainer[model]
+                    if espData and espData.Label and espData.Part and rootPart then
+                        local isVisible = (selectedIslandItem == "All Islands" or selectedIslandItem == espData.DisplayName)
+                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
+                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
+
+                        if isVisible then
+                            local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
+                            espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                        end
+                    end
+                end
+            end
+        else
+            if next(IslandsESPContainer) then clearIslandsESP() end
+        end
+
+        -- 4. Creatures ESP 更新 (workspace.CreatureContainer)
+        if ESP_CreaturesEnabled then
+            local creaturesFolder = workspace:FindFirstChild("CreatureContainer")
+            if creaturesFolder then
+                for _, model in ipairs(creaturesFolder:GetChildren()) do
+                    if not CreaturesESPContainer[model] then
+                        createCreatureESP(model)
+                    end
+
+                    local espData = CreaturesESPContainer[model]
+                    if espData and espData.Label and espData.Part and rootPart then
+                        local isVisible = (selectedCreatureItem == "All Creatures" or selectedCreatureItem == espData.DisplayName)
+                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
+                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
+
+                        if isVisible then
+                            local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
+                            if espData.Humanoid then
+                                local hpPct = math.round((espData.Humanoid.Health / math.max(1, espData.Humanoid.MaxHealth)) * 100)
+                                espData.Label.Text = string.format("%s [%dm] [%d%%]", espData.DisplayName, dist, hpPct)
+                            else
+                                espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            if next(CreaturesESPContainer) then clearCreaturesESP() end
+        end
+
+        -- 5. Debris & Food ESP 更新
         if ESP_MaterialsEnabled or ESP_FoodEnabled then
             local debrisFolder = workspace:FindFirstChild("DebrisField")
             if debrisFolder then
