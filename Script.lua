@@ -146,27 +146,6 @@ else
     Window:MakeTabGroup({ Name = "Others", Title = "Others" })
 end
 
-local ESPTab, ObjectTab, ConfigTab, AutoTab
-if not isLobby then
-    local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
-    local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
-    local PlayerTab = Window:MakeTab({Name = "Player", Icon = "user", Group = "Main", PremiumOnly = false})
-    ESPTab = Window:MakeTab({Name = "ESP", Icon = "eye", Group = "Main", PremiumOnly = false})
-    local TeleportTab = Window:MakeTab({Name = "Teleport", Icon = "footprints", Group = "Main", PremiumOnly = false})
-    ObjectTab = Window:MakeTab({Name = "Objects", Icon = "rbxassetid://105880397565283", Group = "Main", PremiumOnly = false})
-    local KeybindsTab = Window:MakeTab({Name = "Keybinds", Icon = "keyboard", Group = "Main", PremiumOnly = false})
-    AutoTab = Window:MakeTab({Name = "Automation", Icon = "infinity", Group = "Main", PremiumOnly = false})
-end
-
-local InfoTab = Window:MakeTab({Name = "Information", Icon = "info", Group = "Others", PremiumOnly = false})
-
-if not isLobby then
-    local MiscTab = Window:MakeTab({Name = "Misc", Icon = "box", Group = "Others", PremiumOnly = false})
-    ConfigTab = Window:MakeTab({Name = "Settings", Icon = "settings", Group = "Others", PremiumOnly = false})
-    local PremiumInfoTab = Window:MakeTab({Name = "Premium Info", Icon = "crown", Group = "Others", PremiumOnly = false})
-    local CreditsTab = Window:MakeTab({Name = "Credits", Icon = "user-round-check", Group = "Others", PremiumOnly = false})
-end
-
 local LocalPlayer = service.Players.LocalPlayer
 local startTime = os.clock()
 local fps = 0
@@ -194,7 +173,7 @@ local function isFoodItem(name)
 end
 
 -- ==========================================
--- ★ Automation (自動化機能) 設定変数 ★
+-- ★ 全機能 変数定義 ★
 -- ==========================================
 local AutoCollectItemsEnabled = false
 local AutoCollectChestsEnabled = false
@@ -204,9 +183,6 @@ local AutoFarmCreaturesEnabled = false
 local AutoFarmDistanceBehind = 4
 local AutoAttackToolEnabled = true
 
--- ==========================================
--- ★ ESP 管理データ ★
--- ==========================================
 local MaxESPDistance = 500
 
 local ESP_PlayerEnabled = false
@@ -581,7 +557,7 @@ local function createDebrisESP(model)
     }
 end
 
--- 自動スキャン関数
+-- 全ESPカテゴリ自動スキャン＆ドロップダウン自動リフレッシュ関数
 local function scanAndRefreshDropdowns()
     -- 1. Players
     local currentPlayers = {}
@@ -709,7 +685,9 @@ local function scanAndRefreshDropdowns()
 
     table.sort(currentMaterials, function(a, b)
         if a == UNKNOWN_ITEM_MSG then return false end
-        if b == UNKNOWN_ITEM_MSG then return true end
+        if b == UNKNOWN_ITEM_MSG me
+            return true
+        end
         return a < b
     end)
     table.sort(currentFoods)
@@ -740,10 +718,184 @@ local function scanAndRefreshDropdowns()
 end
 
 -- ==========================================
--- ★ AutoTab (Automation) 自動化機能 ★
+-- ★ ウィンドウ & タブ UI 構築 (完全直結化) ★
 -- ==========================================
-if AutoTab then
-    -- 自動回収セクション
+if not isLobby then
+    local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
+    local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
+    local PlayerTab = Window:MakeTab({Name = "Player", Icon = "user", Group = "Main", PremiumOnly = false})
+    
+    -- ★ 1. ESP タブ構築 ★
+    ESPTab = Window:MakeTab({Name = "ESP", Icon = "eye", Group = "Main", PremiumOnly = false})
+    
+    ESPTab:AddSection({
+        Name = getGradientText("ESP General Settings", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddSlider({
+        Name = "Max ESP Distance",
+        Min = 50,
+        Max = 3000,
+        Default = 500,
+        Color = emeraldGreen,
+        Increment = 50,
+        ValueName = "m",
+        Callback = function(Value)
+            MaxESPDistance = Value
+        end
+    })
+
+    ESPTab:AddSection({
+        Name = getGradientText("Player ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Player ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_PlayerEnabled = Value
+            ShowToggleNotification("Player ESP", Value)
+            if not Value then clearPlayerESP() end
+        end
+    })
+
+    PlayerDropdown = ESPTab:AddDropdown({
+        Name = "Filter Target Player",
+        Default = "All Players",
+        Options = playersList,
+        Callback = function(Value)
+            selectedPlayerItem = Value
+            ShowNotification("Player Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    ESPTab:AddSection({
+        Name = getGradientText("Chests ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Chests ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_ChestsEnabled = Value
+            ShowToggleNotification("Chests ESP", Value)
+            if not Value then clearChestsESP() end
+        end
+    })
+
+    ChestDropdown = ESPTab:AddDropdown({
+        Name = "Filter Target Chest",
+        Default = "All Chests",
+        Options = chestsList,
+        Callback = function(Value)
+            selectedChestItem = Value
+            ShowNotification("Chest Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    ESPTab:AddSection({
+        Name = getGradientText("Islands ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Islands ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_IslandsEnabled = Value
+            ShowToggleNotification("Islands ESP", Value)
+            if not Value then clearIslandsESP() end
+        end
+    })
+
+    IslandDropdown = ESPTab:AddDropdown({
+        Name = "Filter Target Island",
+        Default = "All Islands",
+        Options = islandsList,
+        Callback = function(Value)
+            selectedIslandItem = Value
+            ShowNotification("Island Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    ESPTab:AddSection({
+        Name = getGradientText("Creatures ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Creatures ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_CreaturesEnabled = Value
+            ShowToggleNotification("Creatures ESP", Value)
+            if not Value then clearCreaturesESP() end
+        end
+    })
+
+    CreatureDropdown = ESPTab:AddDropdown({
+        Name = "Filter Target Creature",
+        Default = "All Creatures",
+        Options = creaturesList,
+        Callback = function(Value)
+            selectedCreatureItem = Value
+            ShowNotification("Creature Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    ESPTab:AddSection({
+        Name = getGradientText("Debris & Materials ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Materials ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_MaterialsEnabled = Value
+            ShowToggleNotification("Materials ESP", Value)
+            if not Value and not ESP_FoodEnabled then clearDebrisESP() end
+        end
+    })
+
+    MaterialDropdown = ESPTab:AddDropdown({
+        Name = "Filter Material Item",
+        Default = "All Materials",
+        Options = materialsList,
+        Callback = function(Value)
+            selectedMaterialItem = Value
+            ShowNotification("Material Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    ESPTab:AddSection({
+        Name = getGradientText("Food & Consumables ESP", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddToggle({
+        Name = "Enable Food ESP",
+        Default = false,
+        Callback = function(Value)
+            ESP_FoodEnabled = Value
+            ShowToggleNotification("Food ESP", Value)
+            if not Value and not ESP_MaterialsEnabled then clearDebrisESP() end
+        end
+    })
+
+    FoodDropdown = ESPTab:AddDropdown({
+        Name = "Filter Food Item",
+        Default = "All Foods",
+        Options = foodList,
+        Callback = function(Value)
+            selectedFoodItem = Value
+            ShowNotification("Food Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
+        end
+    })
+
+    local TeleportTab = Window:MakeTab({Name = "Teleport", Icon = "footprints", Group = "Main", PremiumOnly = false})
+    local ObjectTab = Window:MakeTab({Name = "Objects", Icon = "rbxassetid://105880397565283", Group = "Main", PremiumOnly = false})
+    local KeybindsTab = Window:MakeTab({Name = "Keybinds", Icon = "keyboard", Group = "Main", PremiumOnly = false})
+
+    -- ★ 2. Automation タブ構築 ★
+    AutoTab = Window:MakeTab({Name = "Automation", Icon = "infinity", Group = "Main", PremiumOnly = false})
+
     AutoTab:AddSection({
         Name = getGradientText("Item Auto Collection", emeraldGreen, shinySilver)
     })
@@ -779,7 +931,6 @@ if AutoTab then
         end
     })
 
-    -- クリーチャー自動ファームセクション
     AutoTab:AddSection({
         Name = getGradientText("Creature Auto Farm", emeraldGreen, shinySilver)
     })
@@ -815,6 +966,59 @@ if AutoTab then
     })
 end
 
+local InfoTab = Window:MakeTab({Name = "Information", Icon = "info", Group = "Others", PremiumOnly = false})
+
+if not isLobby then
+    local MiscTab = Window:MakeTab({Name = "Misc", Icon = "box", Group = "Others", PremiumOnly = false})
+    
+    -- ★ 3. Settings タブ構築 ★
+    ConfigTab = Window:MakeTab({Name = "Settings", Icon = "settings", Group = "Others", PremiumOnly = false})
+
+    ConfigTab:AddSection({
+        Name = getGradientText("Notification Settings", emeraldGreen, shinySilver)
+    })
+
+    ConfigTab:AddToggle({
+        Name = "Enable Notifications",
+        Default = true,
+        Callback = function(Value)
+            NotificationsEnabled = Value
+            if Value then
+                Notify("Notifications", "Notifications are now ENABLED", "Yes")
+            end
+        end
+    })
+
+    ConfigTab:AddSlider({
+        Name = "Notification Duration",
+        Min = 1,
+        Max = 10,
+        Default = 4,
+        Color = emeraldGreen,
+        Increment = 1,
+        ValueName = "sec",
+        Callback = function(Value)
+            NotificationSettings.Time = Value
+        end
+    })
+
+    ConfigTab:AddSlider({
+        Name = "Notification Volume",
+        Min = 0,
+        Max = 1,
+        Default = 1,
+        Color = emeraldGreen,
+        Increment = 0.1,
+        ValueName = "Vol",
+        Callback = function(Value)
+            NotificationSettings.Volume = Value
+        end
+    })
+
+    local PremiumInfoTab = Window:MakeTab({Name = "Premium Info", Icon = "crown", Group = "Others", PremiumOnly = false})
+    local CreditsTab = Window:MakeTab({Name = "Credits", Icon = "user-round-check", Group = "Others", PremiumOnly = false})
+end
+
 -- ★ 1. 自動回収（Auto Collect）実行ロジック ★
 task.spawn(function()
     while task.wait(0.1) do
@@ -824,7 +1028,6 @@ task.spawn(function()
             if rootPart then
                 local targetCF = rootPart.CFrame * CFrame.new(0, 0, -3)
 
-                -- 素材・アイテム回収
                 if AutoCollectItemsEnabled then
                     local debrisFolder = workspace:FindFirstChild("DebrisField")
                     if debrisFolder then
@@ -851,7 +1054,6 @@ task.spawn(function()
                     end
                 end
 
-                -- 宝箱回収
                 if AutoCollectChestsEnabled then
                     local chestsFolder = workspace:FindFirstChild("Chests")
                     if chestsFolder then
@@ -914,12 +1116,10 @@ task.spawn(function()
                     end
 
                     if closestCreature then
-                        -- 敵の背後にTP追従
                         local enemyCF = closestCreature.Root.CFrame
                         local targetPos = enemyCF * CFrame.new(0, 0, AutoFarmDistanceBehind)
                         rootPart.CFrame = targetPos
 
-                        -- 自動攻撃（ツールを自動振る）
                         if AutoAttackToolEnabled then
                             local tool = character:FindFirstChildOfClass("Tool")
                             if not tool then
@@ -940,224 +1140,6 @@ task.spawn(function()
         end
     end
 end)
-
--- ==========================================
--- ★ ESPTab UI 構築 ★
--- ==========================================
-if ESPTab then
-    ESPTab:AddSection({
-        Name = getGradientText("ESP General Settings", emeraldGreen, shinySilver)
-    })
-
-    ESPTab:AddSlider({
-        Name = "Max ESP Distance",
-        Min = 50,
-        Max = 3000,
-        Default = 500,
-        Color = emeraldGreen,
-        Increment = 50,
-        ValueName = "m",
-        Callback = function(Value)
-            MaxESPDistance = Value
-        end
-    })
-
-    -- 1. Player ESP
-    ESPTab:AddSection({
-        Name = getGradientText("Player ESP", emeraldGreen, shinySilver)
-    })
-
-    ESPTab:AddToggle({
-        Name = "Enable Player ESP",
-        Default = false,
-        Callback = function(Value)
-            ESP_PlayerEnabled = Value
-            ShowToggleNotification("Player ESP", Value)
-            if not Value then clearPlayerESP() end
-        end
-    })
-
-    PlayerDropdown = ESPTab:AddDropdown({
-        Name = "Filter Target Player",
-        Default = "All Players",
-        Options = playersList,
-        Callback = function(Value)
-            selectedPlayerItem = Value
-            ShowNotification("Player Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
-        end
-    })
-
-    -- 2. Chests ESP
-    ESPTab:AddSection({
-        Name = getGradientText("Chests ESP", emeraldGreen, shinySilver)
-    })
-
-    ESPTab:AddToggle({
-        Name = "Enable Chests ESP",
-        Default = false,
-        Callback = function(Value)
-            ESP_ChestsEnabled = Value
-            ShowToggleNotification("Chests ESP", Value)
-            if not Value then clearChestsESP() end
-        end
-    })
-
-    ChestDropdown = ESPTab:AddDropdown({
-        Name = "Filter Target Chest",
-        Default = "All Chests",
-        Options = chestsList,
-        Callback = function(Value)
-            selectedChestItem = Value
-            ShowNotification("Chest Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
-        end
-    })
-
-    -- 3. Islands ESP
-    ESPTab:AddSection({
-        Name = getGradientText("Islands ESP", emeraldGreen, shinySilver)
-    })
-
-    ESPTab:AddToggle({
-        Name = "Enable Islands ESP",
-        Default = false,
-        Callback = function(Value)
-            ESP_IslandsEnabled = Value
-            ShowToggleNotification("Islands ESP", Value)
-            if not Value then clearIslandsESP() end
-        end
-    })
-
-    IslandDropdown = ESPTab:AddDropdown({
-        Name = "Filter Target Island",
-        Default = "All Islands",
-        Options = islandsList,
-        Callback = function(Value)
-            selectedIslandItem = Value
-            ShowNotification("Island Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
-        end
-    })
-
-    -- 4. Creatures ESP
-    ESPTab:AddSection({
-        Name = getGradientText("Creatures ESP", emeraldGreen, shinySilver)
-    })
-
-    ESPTab:AddToggle({
-        Name = "Enable Creatures ESP",
-        Default = false,
-        Callback = function(Value)
-            ESP_CreaturesEnabled = Value
-            ShowToggleNotification("Creatures ESP", Value)
-            if not Value then clearCreaturesESP() end
-        end
-    })
-
-    CreatureDropdown = ESPTab:AddDropdown({
-        Name = "Filter Target Creature",
-        Default = "All Creatures",
-        Options = creaturesList,
-        Callback = function(Value)
-            selectedCreatureItem = Value
-            ShowNotification("Creature Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
-        end
-    })
-
-    -- 5. Debris & Materials ESP
-    ESPTab:AddSection({
-        Name = getGradientText("Debris & Materials ESP", emeraldGreen, shinySilver)
-    })
-
-    ESPTab:AddToggle({
-        Name = "Enable Materials ESP",
-        Default = false,
-        Callback = function(Value)
-            ESP_MaterialsEnabled = Value
-            ShowToggleNotification("Materials ESP", Value)
-            if not Value and not ESP_FoodEnabled then clearDebrisESP() end
-        end
-    })
-
-    MaterialDropdown = ESPTab:AddDropdown({
-        Name = "Filter Material Item",
-        Default = "All Materials",
-        Options = materialsList,
-        Callback = function(Value)
-            selectedMaterialItem = Value
-            ShowNotification("Material Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
-        end
-    })
-
-    -- 6. Food & Consumables ESP
-    ESPTab:AddSection({
-        Name = getGradientText("Food & Consumables ESP", emeraldGreen, shinySilver)
-    })
-
-    ESPTab:AddToggle({
-        Name = "Enable Food ESP",
-        Default = false,
-        Callback = function(Value)
-            ESP_FoodEnabled = Value
-            ShowToggleNotification("Food ESP", Value)
-            if not Value and not ESP_MaterialsEnabled then clearDebrisESP() end
-        end
-    })
-
-    FoodDropdown = ESPTab:AddDropdown({
-        Name = "Filter Food Item",
-        Default = "All Foods",
-        Options = foodList,
-        Callback = function(Value)
-            selectedFoodItem = Value
-            ShowNotification("Food Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
-        end
-    })
-end
-
--- ==========================================
--- ★ ConfigTab (Settings) 通知設定 ★
--- ==========================================
-if ConfigTab then
-    ConfigTab:AddSection({
-        Name = getGradientText("Notification Settings", emeraldGreen, shinySilver)
-    })
-
-    ConfigTab:AddToggle({
-        Name = "Enable Notifications",
-        Default = true,
-        Callback = function(Value)
-            NotificationsEnabled = Value
-            if Value then
-                Notify("Notifications", "Notifications are now ENABLED", "Yes")
-            end
-        end
-    })
-
-    ConfigTab:AddSlider({
-        Name = "Notification Duration",
-        Min = 1,
-        Max = 10,
-        Default = 4,
-        Color = emeraldGreen,
-        Increment = 1,
-        ValueName = "sec",
-        Callback = function(Value)
-            NotificationSettings.Time = Value
-        end
-    })
-
-    ConfigTab:AddSlider({
-        Name = "Notification Volume",
-        Min = 0,
-        Max = 1,
-        Default = 1,
-        Color = emeraldGreen,
-        Increment = 0.1,
-        ValueName = "Vol",
-        Callback = function(Value)
-            NotificationSettings.Volume = Value
-        end
-    })
-end
 
 -- バックグラウンド全自動スキャン (5秒間隔)
 task.spawn(function()
