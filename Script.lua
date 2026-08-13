@@ -206,9 +206,8 @@ InfoTab:AddSection({Name = getGradientText("Discord Community", emeraldGreen, sh
 
 local inviteCode = "uA35WWXpsu"
 local discordDesc = "<font color=\"#E0E6ED\"><b>Server Name:</b></font> ---\n<font color=\"#E0E6ED\"><b>Member Count:</b></font> ---\n<font color=\"#E0E6ED\"><b>Online Count:</b></font> ---"
-local discordServerIcon = "rbxassetid://10709791437" -- 取得失敗時の予備アイコン
+local discordServerIcon = "rbxassetid://10709791437"
 
--- Discord API経由でサーバー情報＆アイコンをプロキシ経由でダウンロード
 local successApi, result = pcall(function()
     local apiURL = "https://discord.com/api/v9/invites/" .. inviteCode .. "?with_counts=true"
     return service.HttpService:JSONDecode(game:HttpGet(apiURL))
@@ -229,7 +228,6 @@ if successApi and result and result.guild then
         onlineCount
     )
 
-    -- Discord CDNブロック回避プロキシ (wsrv.nl) を利用してサーバーアイコンを画像変換
     if guild.icon then
         local getasset = getcustomasset or getsynasset
         local req = request or http_request or (syn and syn.request)
@@ -255,7 +253,6 @@ if successApi and result and result.guild then
     end
 end
 
--- InfoTab内にDiscordサーバーアイコン付きで表示
 InfoTab:AddImageParagraph(discordServerIcon, discordDesc)
 
 InfoTab:AddButton({
@@ -324,10 +321,11 @@ task.spawn(function()
             if not desc:GetAttribute("TitleGradientActive") then
                 desc:SetAttribute("TitleGradientActive", true)
                 task.spawn(function()
-                    local speed = 1.2
+                    local speed = 0.6 -- 一定速度でスクロールするスピード
                     while desc and desc.Parent and titleGradient and titleGradient.Parent do
-                        local offset = math.sin(tick() * speed) * 0.35
-                        titleGradient.Offset = Vector2.new(offset, 0)
+                        -- 一定方向へ止まらずループさせる計算（待ち時間を解消）
+                        local offset = (tick() * speed) % 1
+                        titleGradient.Offset = Vector2.new(-offset, 0)
                         task.wait()
                     end
                 end)
