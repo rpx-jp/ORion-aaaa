@@ -146,7 +146,7 @@ else
     Window:MakeTabGroup({ Name = "Others", Title = "Others" })
 end
 
-local ESPTab, ObjectTab, ConfigTab
+local ESPTab, ObjectTab, ConfigTab, AutoTab
 if not isLobby then
     local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
     local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
@@ -155,7 +155,7 @@ if not isLobby then
     local TeleportTab = Window:MakeTab({Name = "Teleport", Icon = "footprints", Group = "Main", PremiumOnly = false})
     ObjectTab = Window:MakeTab({Name = "Objects", Icon = "rbxassetid://105880397565283", Group = "Main", PremiumOnly = false})
     local KeybindsTab = Window:MakeTab({Name = "Keybinds", Icon = "keyboard", Group = "Main", PremiumOnly = false})
-    local AutoTab = Window:MakeTab({Name = "Automation", Icon = "infinity", Group = "Main", PremiumOnly = false})
+    AutoTab = Window:MakeTab({Name = "Automation", Icon = "infinity", Group = "Main", PremiumOnly = false})
 end
 
 local InfoTab = Window:MakeTab({Name = "Information", Icon = "info", Group = "Others", PremiumOnly = false})
@@ -194,39 +194,45 @@ local function isFoodItem(name)
 end
 
 -- ==========================================
--- ★ 超高速パフォーマンスESP管理システム ★
+-- ★ Automation (自動化機能) 設定変数 ★
 -- ==========================================
-local MaxESPDistance = 500 -- 最大表示距離 (m)
+local AutoCollectItemsEnabled = false
+local AutoCollectChestsEnabled = false
+local AutoCollectDistance = 200
 
--- 1. Player ESP
+local AutoFarmCreaturesEnabled = false
+local AutoFarmDistanceBehind = 4
+local AutoAttackToolEnabled = true
+
+-- ==========================================
+-- ★ ESP 管理データ ★
+-- ==========================================
+local MaxESPDistance = 500
+
 local ESP_PlayerEnabled = false
 local selectedPlayerItem = "All Players"
 local playersList = {"All Players"}
 local PlayerESPContainer = {}
 local PlayerDropdown = nil
 
--- 2. Chests ESP
 local ESP_ChestsEnabled = false
 local selectedChestItem = "All Chests"
 local chestsList = {"All Chests"}
 local ChestsESPContainer = {}
 local ChestDropdown = nil
 
--- 3. Islands ESP
 local ESP_IslandsEnabled = false
 local selectedIslandItem = "All Islands"
 local islandsList = {"All Islands"}
 local IslandsESPContainer = {}
 local IslandDropdown = nil
 
--- 4. Creatures ESP
 local ESP_CreaturesEnabled = false
 local selectedCreatureItem = "All Creatures"
 local creaturesList = {"All Creatures"}
 local CreaturesESPContainer = {}
 local CreatureDropdown = nil
 
--- 5. Debris & Food ESP
 local ESP_MaterialsEnabled = false
 local selectedMaterialItem = "All Materials"
 local materialsList = {"All Materials"}
@@ -239,7 +245,7 @@ local DebrisESPContainer = {}
 local MaterialDropdown = nil
 local FoodDropdown = nil
 
--- テキスト再描画スキップヘルパー関数 (60FPS固定の要)
+-- 超軽量テキスト更新ヘルパー関数
 local function updateESPLabel(espData, newText, isVisible)
     if not espData then return end
     
@@ -575,7 +581,7 @@ local function createDebrisESP(model)
     }
 end
 
--- 全ESPカテゴリ自動スキャン＆ドロップダウン自動リフレッシュ関数
+-- 自動スキャン関数
 local function scanAndRefreshDropdowns()
     -- 1. Players
     local currentPlayers = {}
@@ -734,10 +740,211 @@ local function scanAndRefreshDropdowns()
 end
 
 -- ==========================================
--- ★ ESPTab UI 構築 (最大距離スライダー搭載) ★
+-- ★ AutoTab (Automation) 自動化機能 ★
+-- ==========================================
+if AutoTab then
+    -- 自動回収セクション
+    AutoTab:AddSection({
+        Name = getGradientText("Item Auto Collection", emeraldGreen, shinySilver)
+    })
+
+    AutoTab:AddToggle({
+        Name = "Auto Collect Debris / Items",
+        Default = false,
+        Callback = function(Value)
+            AutoCollectItemsEnabled = Value
+            ShowToggleNotification("Auto Collect Items", Value)
+        end
+    })
+
+    AutoTab:AddToggle({
+        Name = "Auto Collect Chests",
+        Default = false,
+        Callback = function(Value)
+            AutoCollectChestsEnabled = Value
+            ShowToggleNotification("Auto Collect Chests", Value)
+        end
+    })
+
+    AutoTab:AddSlider({
+        Name = "Collection Range",
+        Min = 50,
+        Max = 1000,
+        Default = 200,
+        Color = emeraldGreen,
+        Increment = 25,
+        ValueName = "m",
+        Callback = function(Value)
+            AutoCollectDistance = Value
+        end
+    })
+
+    -- クリーチャー自動ファームセクション
+    AutoTab:AddSection({
+        Name = getGradientText("Creature Auto Farm", emeraldGreen, shinySilver)
+    })
+
+    AutoTab:AddToggle({
+        Name = "Auto Farm Creatures",
+        Default = false,
+        Callback = function(Value)
+            AutoFarmCreaturesEnabled = Value
+            ShowToggleNotification("Auto Farm Creatures", Value)
+        end
+    })
+
+    AutoTab:AddToggle({
+        Name = "Auto Attack (Swing Tool)",
+        Default = true,
+        Callback = function(Value)
+            AutoAttackToolEnabled = Value
+        end
+    })
+
+    AutoTab:AddSlider({
+        Name = "Position Behind Distance",
+        Min = 2,
+        Max = 10,
+        Default = 4,
+        Color = emeraldGreen,
+        Increment = 1,
+        ValueName = "studs",
+        Callback = function(Value)
+            AutoFarmDistanceBehind = Value
+        end
+    })
+end
+
+-- ★ 1. 自動回収（Auto Collect）実行ロジック ★
+task.spawn(function()
+    while task.wait(0.1) do
+        if AutoCollectItemsEnabled or AutoCollectChestsEnabled then
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            if rootPart then
+                local targetCF = rootPart.CFrame * CFrame.new(0, 0, -3)
+
+                -- 素材・アイテム回収
+                if AutoCollectItemsEnabled then
+                    local debrisFolder = workspace:FindFirstChild("DebrisField")
+                    if debrisFolder then
+                        for _, model in ipairs(debrisFolder:GetChildren()) do
+                            local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
+                            if primaryPart then
+                                local dist = (rootPart.Position - primaryPart.Position).Magnitude
+                                if dist <= AutoCollectDistance then
+                                    for _, prompt in ipairs(model:GetDescendants()) do
+                                        if prompt:IsA("ProximityPrompt") then
+                                            pcall(function() fireproximityprompt(prompt) end)
+                                        end
+                                    end
+                                    pcall(function()
+                                        if model:IsA("Model") then
+                                            model:PivotTo(targetCF)
+                                        elseif model:IsA("BasePart") then
+                                            model.CFrame = targetCF
+                                        end
+                                    end)
+                                end
+                            end
+                        end
+                    end
+                end
+
+                -- 宝箱回収
+                if AutoCollectChestsEnabled then
+                    local chestsFolder = workspace:FindFirstChild("Chests")
+                    if chestsFolder then
+                        for _, model in ipairs(chestsFolder:GetChildren()) do
+                            local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
+                            if primaryPart then
+                                local dist = (rootPart.Position - primaryPart.Position).Magnitude
+                                if dist <= AutoCollectDistance then
+                                    for _, prompt in ipairs(model:GetDescendants()) do
+                                        if prompt:IsA("ProximityPrompt") then
+                                            pcall(function() fireproximityprompt(prompt) end)
+                                        end
+                                    end
+                                    pcall(function()
+                                        if model:IsA("Model") then
+                                            model:PivotTo(targetCF)
+                                        elseif model:IsA("BasePart") then
+                                            model.CFrame = targetCF
+                                        end
+                                    end)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ★ 2. クリーチャー自動ファーム（Auto Farm）実行ロジック ★
+task.spawn(function()
+    while task.wait(0.05) do
+        if AutoFarmCreaturesEnabled then
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            local myHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+            if rootPart and myHumanoid and myHumanoid.Health > 0 then
+                local creaturesFolder = workspace:FindFirstChild("CreatureContainer")
+                if creaturesFolder then
+                    local closestCreature = nil
+                    local shortestDist = math.huge
+
+                    for _, model in ipairs(creaturesFolder:GetChildren()) do
+                        local hum = model:FindFirstChildOfClass("Humanoid")
+                        local enemyRoot = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)) or (model:IsA("BasePart") and model)
+                        
+                        if enemyRoot and hum and hum.Health > 0 then
+                            local dist = (rootPart.Position - enemyRoot.Position).Magnitude
+                            if dist < shortestDist then
+                                shortestDist = dist
+                                closestCreature = {
+                                    Model = model,
+                                    Root = enemyRoot,
+                                    Humanoid = hum
+                                }
+                            end
+                        end
+                    end
+
+                    if closestCreature then
+                        -- 敵の背後にTP追従
+                        local enemyCF = closestCreature.Root.CFrame
+                        local targetPos = enemyCF * CFrame.new(0, 0, AutoFarmDistanceBehind)
+                        rootPart.CFrame = targetPos
+
+                        -- 自動攻撃（ツールを自動振る）
+                        if AutoAttackToolEnabled then
+                            local tool = character:FindFirstChildOfClass("Tool")
+                            if not tool then
+                                local backpackTool = LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+                                if backpackTool then
+                                    myHumanoid:EquipTool(backpackTool)
+                                    tool = backpackTool
+                                end
+                            end
+
+                            if tool then
+                                pcall(function() tool:Activate() end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- ★ ESPTab UI 構築 ★
 -- ==========================================
 if ESPTab then
-    -- 全般設定セクション
     ESPTab:AddSection({
         Name = getGradientText("ESP General Settings", emeraldGreen, shinySilver)
     })
@@ -952,7 +1159,7 @@ if ConfigTab then
     })
 end
 
--- バックグラウンド全自動スキャン (5秒間隔に超軽量化)
+-- バックグラウンド全自動スキャン (5秒間隔)
 task.spawn(function()
     while task.wait(5) do
         scanAndRefreshDropdowns()
