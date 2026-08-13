@@ -34,7 +34,7 @@ end
 
 -- 外国語自動翻訳関数
 local function translateToEnglish(text)
-    if not text or text == "" or text == "Loading..." then return text end
+    if not text or text == "" or text == "Detecting Game..." then return text end
     if not text:find("[^\1-\127]") then return text end
     
     local success, res = pcall(function()
@@ -61,13 +61,41 @@ local NotificationSettings={
     Volume=1
 }
 
+-- ★ アイコンが回転するアニメーション付き通知関数 ★
 local function ShowNotification(title, content, image, soundId)
+    local imgId = image or NotificationSettings.CheckImage
+    
     OrionLib:MakeNotification({
         Name = title or "Notification",
         Content = content or "",
-        Image = image or NotificationSettings.CheckImage,
+        Image = imgId,
         Time = NotificationSettings.Time
     })
+    
+    -- アイコン（ImageLabel）を360度クルクル回転させるエフェクト
+    task.spawn(function()
+        task.wait(0.05)
+        local CoreGui = (gethui and gethui()) or game:GetService("CoreGui")
+        local OrionGui = CoreGui:FindFirstChild("OrionBliz")
+        if OrionGui then
+            for _, desc in ipairs(OrionGui:GetDescendants()) do
+                if desc:IsA("ImageLabel") and (desc.Image == imgId or desc.Image:find("16210234931")) then
+                    if not desc:GetAttribute("SpinningActive") then
+                        desc:SetAttribute("SpinningActive", true)
+                        task.spawn(function()
+                            local angle = 0
+                            while desc and desc.Parent do
+                                angle = (angle + 5) % 360
+                                desc.Rotation = angle
+                                task.wait(0.02)
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+    end)
+
     if soundId then
         local sound = Instance.new("Sound")
         sound.Parent = service.SoundService
@@ -105,7 +133,7 @@ local Window = OrionLib:MakeWindow({
     SaveConfig = true, 
     ConfigFolder = "XunznHub", 
     IntroEnabled = true, 
-    IntroText = "Loading... Please wait :3",
+    IntroText = "Initializing Systems...", -- スタイリッシュな起動テキスト
     Keybind = "RightShift", 
     FreeMouse = false
 })
@@ -146,7 +174,7 @@ local emeraldGreen = Color3.fromRGB(0, 220, 150)
 local shinySilver  = Color3.fromRGB(240, 245, 255)
 
 -- ==========================================
--- ★ DebrisField ESP & リアルタイム自動更新システム ★
+-- ★ DebrisField ESP & ご提示のドロップダウン構文準拠システム ★
 -- ==========================================
 local ESP_DebrisEnabled = false
 local selectedFilterItem = "All Items"
@@ -174,25 +202,6 @@ local function getModelMeshName(model)
     return model.Name
 end
 
--- ドロップダウンの文字見切れ(...)防止・表示補正ヘルパー関数
-local function FixDropdownDisplay(dropdownObj, selectedValue)
-    if not dropdownObj then return end
-    pcall(function()
-        local frame = dropdownObj.Frame or dropdownObj.Instance
-        if frame then
-            for _, desc in ipairs(frame:GetDescendants()) do
-                if desc:IsA("TextLabel") then
-                    desc.TextTruncate = Enum.TextTruncate.None
-                    desc.ClipsDescendants = false
-                    if desc.Name == "Value" or desc.Name == "Selected" or desc.Text == "..." then
-                        desc.Text = tostring(selectedValue)
-                    end
-                end
-            end
-        end
-    end)
-end
-
 local function createDebrisESP(model)
     if not ESP_DebrisEnabled then return end
     if DebrisESPContainer[model] then return end
@@ -202,7 +211,7 @@ local function createDebrisESP(model)
 
     local displayName = getModelMeshName(model)
 
-    -- Highlight (発光外形線)
+    -- Highlight (外形発光線)
     local highlight = Instance.new("Highlight")
     highlight.Name = "Xunzn_DebrisHighlight"
     highlight.Adornee = model
@@ -244,7 +253,7 @@ local function createDebrisESP(model)
     }
 end
 
--- 自動スキャン＆ドロップダウン更新関数
+-- ご提示のコード構文 (Refresh & Set) に準拠したスキャン・更新処理
 local function scanAndRefreshDropdown(manualNotify)
     local debrisFolder = workspace:FindFirstChild("DebrisField")
     local foundNew = false
@@ -269,9 +278,12 @@ local function scanAndRefreshDropdown(manualNotify)
 
         if DebrisDropdown then
             local currentVal = selectedFilterItem
+            
+            -- ご提示いただいた Dropdown:Refresh(List<table>, true) の実行
             DebrisDropdown:Refresh(debrisItemsList, true)
+            
+            -- ご提示いただいた Dropdown:Set("dropdown option") の実行
             DebrisDropdown:Set(currentVal)
-            FixDropdownDisplay(DebrisDropdown, currentVal)
         end
 
         if foundNew then
@@ -282,7 +294,7 @@ local function scanAndRefreshDropdown(manualNotify)
     end
 end
 
--- ESPTab 内に UI を配置
+-- ★ ご提示の構文例にピッタリ合わせた ESPTab UI 構築 ★
 if ESPTab then
     ESPTab:AddSection({
         Name = getGradientText("DebrisField Detector & Filter", emeraldGreen, shinySilver)
@@ -300,13 +312,14 @@ if ESPTab then
         end
     })
 
+    -- ご提示いただいた Tab:AddDropdown 形式での作成
     DebrisDropdown = ESPTab:AddDropdown({
         Name = "Filter Target Item",
         Default = "All Items",
         Options = debrisItemsList,
         Callback = function(Value)
             selectedFilterItem = Value
-            FixDropdownDisplay(DebrisDropdown, Value)
+            print("Selected Dropdown Option:", Value)
             ShowNotification("Item Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
             
             for model, elements in pairs(DebrisESPContainer) do
@@ -325,7 +338,7 @@ if ESPTab then
     })
 end
 
--- バックグラウンドで常に新規アイテムを自動検索・スキャン
+-- バックグラウンド自動スキャン
 task.spawn(function()
     while task.wait(2) do
         scanAndRefreshDropdown(false)
@@ -381,7 +394,8 @@ do
     end)
 end
 
-local gameName = "Loading..."
+-- ダサい "Loading..." を廃止し "Detecting Game..." に変更
+local gameName = "Detecting Game..."
 task.spawn(function()
     pcall(function()
         local rawName = service.MarketplaceService:GetProductInfo(game.PlaceId).Name
@@ -389,7 +403,7 @@ task.spawn(function()
     end)
 end)
 
--- ★ ShiftLock検出通知（Notify関数でシンプル表示に統一） ★
+-- ShiftLock検出通知
 task.spawn(function()
     task.wait(1.5)
     if LocalPlayer.DevEnableMouseLock then
@@ -421,7 +435,7 @@ InfoTab:AddParagraph(
 
 InfoTab:AddSection({Name = getGradientText("Session Statistics", emeraldGreen, shinySilver)})
 
-local StatsParagraph = InfoTab:AddParagraph(getGradientText("Live Metrics", emeraldGreen, shinySilver), "Calculating session metrics...")
+local StatsParagraph = InfoTab:AddParagraph(getGradientText("Live Metrics", emeraldGreen, shinySilver), "Initializing Metrics...")
 
 local function UpdateStatsParagraph(paragraphObj, newTitleText, newContentText)
     if not paragraphObj then return end
@@ -458,7 +472,7 @@ local function UpdateStatsParagraph(paragraphObj, newTitleText, newContentText)
     local OrionGui = CoreGui:FindFirstChild("OrionBliz")
     if OrionGui then
         for _, desc in ipairs(OrionGui:GetDescendants()) do
-            if desc:IsA("TextLabel") and (desc.Text:find("Live Metrics") or desc.Text:find("Calculating")) then
+            if desc:IsA("TextLabel") and (desc.Text:find("Live Metrics") or desc.Text:find("Initializing")) then
                 local parentFrame = desc:FindFirstAncestorWhichIsA("Frame")
                 if parentFrame then
                     local labels = {}
@@ -572,7 +586,7 @@ InfoTab:AddButton({
     end
 })
 
--- UI装飾・文字見切れ(...)一括調整ループ
+-- UI装飾・文字見切れ(...)自動解決処理
 task.spawn(function()
     local CoreGui = (gethui and gethui()) or game:GetService("CoreGui")
     local TweenService = game:GetService("TweenService")
@@ -595,7 +609,6 @@ task.spawn(function()
         if badGradient then badGradient:Destroy() end
         if desc:IsA("TextLabel") then
             desc.RichText = true
-            -- UI全般の文字見切れ(...)を自動防止
             desc.TextTruncate = Enum.TextTruncate.None
         end
     end
