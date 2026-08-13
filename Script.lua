@@ -114,7 +114,6 @@ local InfoTab = Window:MakeTab({Name = "Information", Icon = "info", Group = "Ot
 
 if not isLobby then
     local MiscTab = Window:MakeTab({Name = "Misc", Icon = "box", Group = "Others", PremiumOnly = false})
-    local DiscordServerTab = Window:MakeTab({Name = "Discord Server", Icon = "rbxassetid://10709791437", Group = "Others", PremiumOnly = false})
     local ConfigTab = Window:MakeTab({Name = "Settings", Icon = "settings", Group = "Others", PremiumOnly = false})
     local PremiumInfoTab = Window:MakeTab({Name = "Premium Info", Icon = "crown", Group = "Others", PremiumOnly = false})
     local CreditsTab = Window:MakeTab({Name = "Credits", Icon = "user-round-check", Group = "Others", PremiumOnly = false})
@@ -207,9 +206,9 @@ InfoTab:AddSection({Name = getGradientText("Discord Community", emeraldGreen, sh
 
 local inviteCode = "uA35WWXpsu"
 local discordDesc = "<font color=\"#E0E6ED\"><b>Server Name:</b></font> ---\n<font color=\"#E0E6ED\"><b>Member Count:</b></font> ---\n<font color=\"#E0E6ED\"><b>Online Count:</b></font> ---"
-local discordServerIcon = "rbxassetid://10709791437" -- デフォルトの予備アイコン
+local discordServerIcon = "rbxassetid://10709791437" -- 取得失敗時の予備アイコン
 
--- Discord APIからサーバー情報およびアイコン画像の動的取得
+-- Discord API経由でサーバー情報＆アイコンをプロキシ経由でダウンロード
 local successApi, result = pcall(function()
     local apiURL = "https://discord.com/api/v9/invites/" .. inviteCode .. "?with_counts=true"
     return service.HttpService:JSONDecode(game:HttpGet(apiURL))
@@ -218,8 +217,8 @@ end)
 if successApi and result and result.guild then
     local guild = result.guild
     local guildName = guild.name
-    local memberCount = tostring(result.approximate_member_count)
-    local onlineCount = tostring(result.approximate_presence_count)
+    local memberCount = tostring(result.approximate_member_count or "---")
+    local onlineCount = tostring(result.approximate_presence_count or "---")
     
     discordDesc = string.format(
         "<font color=\"#E0E6ED\"><b>Server Name:</b></font> <font color=\"#00E5FF\"><b>%s</b></font>\n" ..
@@ -230,17 +229,23 @@ if successApi and result and result.guild then
         onlineCount
     )
 
-    -- DiscordサーバーのアイコンURLから画像をダウンロードしてRobloxアセット化
+    -- Discord CDNブロック回避プロキシ (wsrv.nl) を利用してサーバーアイコンを画像変換
     if guild.icon then
         local getasset = getcustomasset or getsynasset
+        local req = request or http_request or (syn and syn.request)
         if getasset and writefile then
-            local iconUrl = string.format("https://cdn.discordapp.com/icons/%s/%s.png?size=128", guild.id, guild.icon)
+            local proxyUrl = string.format("https://wsrv.nl/?url=https://cdn.discordapp.com/icons/%s/%s.png", guild.id, guild.icon)
             local successImg, imgData = pcall(function()
-                return game:HttpGet(iconUrl)
+                if req then
+                    local res = req({Url = proxyUrl, Method = "GET"})
+                    return res.Body
+                else
+                    return game:HttpGet(proxyUrl)
+                end
             end)
 
-            if successImg and imgData then
-                local fileName = "XunznHub_DiscordIcon.png"
+            if successImg and imgData and #imgData > 100 then
+                local fileName = "Xunzn_Discord_" .. tostring(guild.id) .. ".png"
                 pcall(function()
                     writefile(fileName, imgData)
                     discordServerIcon = getasset(fileName)
@@ -250,7 +255,7 @@ if successApi and result and result.guild then
     end
 end
 
--- 動的取得したサーバーアイコンを表示
+-- InfoTab内にDiscordサーバーアイコン付きで表示
 InfoTab:AddImageParagraph(discordServerIcon, discordDesc)
 
 InfoTab:AddButton({
