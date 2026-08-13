@@ -30,11 +30,71 @@ local OrionLib = {
     SaveCfg = false
 }
 
+local TweenService = game:GetService("TweenService")
+
+-- ★ レインボーグラデーションを動かす関数
+function OrionLib:StartRainbowStroke(speed)
+    speed = speed or 3 -- 1周にかかる時間（秒数。数字を小さくすると速くなります）
+
+    -- レインボーの色順を設定
+    local rainbowColors = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),     -- 赤
+        ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 127, 0)), -- 橙
+        ColorSequenceKeypoint.new(0.33, Color3.fromRGB(255, 255, 0)), -- 黄
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 0)),   -- 緑
+        ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 191, 255)), -- 水
+        ColorSequenceKeypoint.new(0.83, Color3.fromRGB(139, 0, 255)), -- 紫
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))      -- 赤
+    })
+
+    for _, obj in pairs(self.ThemeObjects) do
+        if obj.Instance and obj.Type == "Stroke" then
+            local inst = obj.Instance
+
+            -- UIStrokeの場合は、グラデーションが綺麗に映るように元の色を白にします
+            if inst:IsA("UIStroke") then
+                inst.Color = Color3.fromRGB(255, 255, 255)
+            elseif inst:IsA("Frame") then
+                inst.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            end
+
+            -- UIGradientを生成（すでにある場合は再利用）
+            local gradient = inst:FindFirstChild("RainbowGradient") or Instance.new("UIGradient")
+            gradient.Name = "RainbowGradient"
+            gradient.Color = rainbowColors
+            gradient.Parent = inst
+
+            -- 既に動いている処理と重ならないようにタグ付け
+            if not gradient:GetAttribute("IsAnimating") then
+                gradient:SetAttribute("IsAnimating", true)
+
+                -- Tweenアニメーションで無限ループ回転
+                task.spawn(function()
+                    while gradient and gradient.Parent do
+                        gradient.Rotation = 0
+                        local tweenInfo = TweenInfo.new(speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+                        local tween = TweenService:Create(gradient, tweenInfo, {Rotation = 360})
+                        tween:Play()
+                        tween.Completed:Wait()
+                    end
+                end)
+            end
+        end
+    end
+end
+
 function OrionLib:AddTheme(themeName, themeData)
     self.Themes[themeName] = themeData
 end
 
 function OrionLib:SetTheme(themeName)
+    -- ★ もしテーマ名が "Rainbow" ならグラデーションアニメーションを開始
+    if themeName == "Rainbow" then
+        self.SelectedTheme = "Rainbow"
+        self:StartRainbowStroke(3) -- 3秒で1周する速度
+        return
+    end
+
     local colors = self.Themes[themeName]
     if not colors then
         warn("テーマが存在しません: "..tostring(themeName))
@@ -54,6 +114,12 @@ function OrionLib:SetTheme(themeName)
 
     for _, obj in pairs(self.ThemeObjects) do
         if obj.Instance and obj.Type then
+            -- Rainbow用のUIGradientが残っていたら削除（普通のテーマに戻すため）
+            local oldGradient = obj.Instance:FindFirstChild("RainbowGradient")
+            if oldGradient then
+                oldGradient:Destroy()
+            end
+
             local prop = propertyMap[obj.Type]
             if prop and colors[obj.Type] then
                 pcall(function()
