@@ -36,7 +36,6 @@ end
 local function translateToEnglish(text)
     if not text or text == "" or text == "Loading..." then return text end
     
-    -- 英語・半角英数字のみの場合は翻訳リクエストをスキップ
     if not text:find("[^\1-\127]") then
         return text
     end
@@ -167,8 +166,24 @@ local gameName = "Loading..."
 task.spawn(function()
     pcall(function()
         local rawName = service.MarketplaceService:GetProductInfo(game.PlaceId).Name
-        gameName = translateToEnglish(rawName) -- 日本語名を自動的に英語へ翻訳
+        gameName = translateToEnglish(rawName)
     end)
+end)
+
+-- ★ ShiftLock検出 & 通知処理 ★
+task.spawn(function()
+    task.wait(1.5) -- GUI起動完了まで少し待機
+    if LocalPlayer.DevEnableMouseLock then
+        OrionLib:MakeNotification({
+            Name = "ShiftLock Notice",
+            Content = "ShiftLock is enabled in this server. RightShift GUI keybind may not work.",
+            Image = "rbxassetid://4384403532",
+            Time = 6,
+            AccentColor = Color3.fromRGB(100, 150, 255),
+            Glassmorphism = true,
+            FluidMotion = true
+        })
+    end
 end)
 
 local function formatTime(sec)
@@ -296,7 +311,7 @@ end)
 
 if successApi and result and result.guild then
     local guild = result.guild
-    local guildName = translateToEnglish(guild.name) -- Guild名も英語に自動翻訳
+    local guildName = translateToEnglish(guild.name)
     local memberCount = tostring(result.approximate_member_count or "---")
     local onlineCount = tostring(result.approximate_presence_count or "---")
     
