@@ -117,12 +117,12 @@ else
     Window:MakeTabGroup({ Name = "Others", Title = "Others" })
 end
 
-local ObjectTab
+local ESPTab, ObjectTab
 if not isLobby then
     local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
     local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
     local PlayerTab = Window:MakeTab({Name = "Player", Icon = "user", Group = "Main", PremiumOnly = false})
-    local ESPTab = Window:MakeTab({Name = "ESP", Icon = "eye", Group = "Main", PremiumOnly = false})
+    ESPTab = Window:MakeTab({Name = "ESP", Icon = "eye", Group = "Main", PremiumOnly = false})
     local TeleportTab = Window:MakeTab({Name = "Teleport", Icon = "footprints", Group = "Main", PremiumOnly = false})
     ObjectTab = Window:MakeTab({Name = "Objects", Icon = "rbxassetid://105880397565283", Group = "Main", PremiumOnly = false})
     local KeybindsTab = Window:MakeTab({Name = "Keybinds", Icon = "keyboard", Group = "Main", PremiumOnly = false})
@@ -146,12 +146,14 @@ local emeraldGreen = Color3.fromRGB(0, 220, 150)
 local shinySilver  = Color3.fromRGB(240, 245, 255)
 
 -- ==========================================
--- ★ DebrisField ESP & フィルター動的システム ★
+-- ★ DebrisField ESP & リアルタイム自動更新システム ★
 -- ==========================================
 local ESP_DebrisEnabled = false
 local selectedFilterItem = "All Items"
 local debrisItemsList = {"All Items"}
+local knownItemSet = {["All Items"] = true}
 local DebrisESPContainer = {}
+local DebrisDropdown = nil
 
 local function clearDebrisESP()
     for model, elements in pairs(DebrisESPContainer) do
@@ -181,7 +183,7 @@ local function createDebrisESP(model)
 
     local displayName = getModelMeshName(model)
 
-    -- Highlight (外形発光)
+    -- Highlight (発光外形線)
     local highlight = Instance.new("Highlight")
     highlight.Name = "Xunzn_DebrisHighlight"
     highlight.Adornee = model
@@ -223,15 +225,51 @@ local function createDebrisESP(model)
     }
 end
 
--- Objectsタブ UI構築（AddSection / AddToggle / AddDropdown / Refresh）
-if ObjectTab then
-    -- セクション作成
-    ObjectTab:AddSection({
+-- 自動スキャン＆ドロップダウン更新関数
+local function scanAndRefreshDropdown(manualNotify)
+    local debrisFolder = workspace:FindFirstChild("DebrisField")
+    local foundNew = false
+
+    if debrisFolder then
+        for _, model in ipairs(debrisFolder:GetChildren()) do
+            local name = getModelMeshName(model)
+            if name and not knownItemSet[name] then
+                knownItemSet[name] = true
+                table.insert(debrisItemsList, name)
+                foundNew = true
+            end
+        end
+    end
+
+    if foundNew or manualNotify then
+        table.sort(debrisItemsList, function(a, b)
+            if a == "All Items" then return true end
+            if b == "All Items" then return false end
+            return a < b
+        end)
+
+        if DebrisDropdown then
+            local currentVal = selectedFilterItem
+            -- ドロップダウンのリフレッシュ
+            DebrisDropdown:Refresh(debrisItemsList, true)
+            DebrisDropdown:Set(currentVal)
+        end
+
+        if foundNew then
+            Notify("New Item Discovered", "Added new item(s) to ESP dropdown!", "Check")
+        elseif manualNotify then
+            Notify("Items Scanned", "Found " .. tostring(#debrisItemsList - 1) .. " item types!", "Yes")
+        end
+    end
+end
+
+-- ESPTab 内に UI を配置
+if ESPTab then
+    ESPTab:AddSection({
         Name = getGradientText("DebrisField Detector & Filter", emeraldGreen, shinySilver)
     })
 
-    -- トグル作成
-    ObjectTab:AddToggle({
+    ESPTab:AddToggle({
         Name = "Enable DebrisField ESP",
         Default = false,
         Callback = function(Value)
@@ -243,8 +281,7 @@ if ObjectTab then
         end
     })
 
-    -- ドロップダウン作成
-    local DebrisDropdown = ObjectTab:AddDropdown({
+    DebrisDropdown = ESPTab:AddDropdown({
         Name = "Filter Target Item",
         Default = "All Items",
         Options = debrisItemsList,
@@ -252,7 +289,6 @@ if ObjectTab then
             selectedFilterItem = Value
             ShowNotification("Item Filter", "Selected: " .. tostring(Value), NotificationSettings.CheckImage)
             
-            -- フィルター選択に合わせてESP表示をリアルタイム切り替え
             for model, elements in pairs(DebrisESPContainer) do
                 local visible = (selectedFilterItem == "All Items" or elements.DisplayName == selectedFilterItem)
                 if elements.Highlight then elements.Highlight.Enabled = visible end
@@ -261,40 +297,22 @@ if ObjectTab then
         end
     })
 
-    -- ドロップダウン動的リフレッシュボタン
-    ObjectTab:AddButton({
-        Name = "Scan & Refresh Item List",
+    ESPTab:AddButton({
+        Name = "Manual Scan & Refresh",
         Callback = function()
-            local newList = {"All Items"}
-            local debrisFolder = workspace:FindFirstChild("DebrisField")
-            if debrisFolder then
-                local foundNames = {}
-                for _, model in ipairs(debrisFolder:GetChildren()) do
-                    local name = getModelMeshName(model)
-                    if name and not foundNames[name] then
-                        foundNames[name] = true
-                        table.insert(newList, name)
-                    end
-                end
-            end
-            
-            table.sort(newList, function(a, b)
-                if a == "All Items" then return true end
-                if b == "All Items" then return false end
-                return a < b
-            end)
-
-            debrisItemsList = newList
-            -- ドロップダウンを動的に更新 (第二引数の true で古い選択肢ボタンを消去)
-            DebrisDropdown:Refresh(debrisItemsList, true)
-            DebrisDropdown:Set("All Items")
-            
-            Notify("Items Scanned", "Found " .. tostring(#debrisItemsList - 1) .. " unique item types!", "Yes")
+            scanAndRefreshDropdown(true)
         end
     })
 end
 
--- ESPメインループ
+-- バックグラウンドで常に新規アイテムを自動検索・スキャン
+task.spawn(function()
+    while task.wait(2) do
+        scanAndRefreshDropdown(false)
+    end
+end)
+
+-- ESPメイン更新ループ
 task.spawn(function()
     while task.wait(0.3) do
         if ESP_DebrisEnabled then
