@@ -1,5 +1,3 @@
-local ScriptURL = getgenv().ScriptURL or ""
-
 local service = setmetatable({}, {
     __index = function(t, k)
         local s = game:GetService(k)
@@ -7,17 +5,6 @@ local service = setmetatable({}, {
         return s
     end
 })
-
-local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or queueonteleport
-
-if queueOnTeleport and ScriptURL ~= "" then
-    pcall(function()
-        queueOnTeleport(string.format([[
-            repeat task.wait() until game:IsLoaded()
-            loadstring(game:HttpGet("%s?t=" .. tostring(tick())))()
-        ]], ScriptURL))
-    end)
-end
 
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/rpx-jp/ORion-aaaa/refs/heads/main/orion?t=" .. tostring(tick())))()
 
@@ -127,7 +114,7 @@ local InfoTab = Window:MakeTab({Name = "Information", Icon = "info", Group = "Ot
 
 if not isLobby then
     local MiscTab = Window:MakeTab({Name = "Misc", Icon = "box", Group = "Others", PremiumOnly = false})
-    local DiscordServerTab = Window:MakeTab({Name = "Discord Server", Icon = "rbxassetid://12058969055", Group = "Others", PremiumOnly = false})
+    local DiscordServerTab = Window:MakeTab({Name = "Discord Server", Icon = "rbxassetid://10709791437", Group = "Others", PremiumOnly = false})
     local ConfigTab = Window:MakeTab({Name = "Settings", Icon = "settings", Group = "Others", PremiumOnly = false})
     local PremiumInfoTab = Window:MakeTab({Name = "Premium Info", Icon = "crown", Group = "Others", PremiumOnly = false})
     local CreditsTab = Window:MakeTab({Name = "Credits", Icon = "user-round-check", Group = "Others", PremiumOnly = false})
@@ -220,16 +207,20 @@ InfoTab:AddSection({Name = getGradientText("Discord Community", emeraldGreen, sh
 
 local inviteCode = "uA35WWXpsu"
 local discordDesc = "<font color=\"#E0E6ED\"><b>Server Name:</b></font> ---\n<font color=\"#E0E6ED\"><b>Member Count:</b></font> ---\n<font color=\"#E0E6ED\"><b>Online Count:</b></font> ---"
+local discordServerIcon = "rbxassetid://10709791437" -- デフォルトの予備アイコン
 
+-- Discord APIからサーバー情報およびアイコン画像の動的取得
 local successApi, result = pcall(function()
     local apiURL = "https://discord.com/api/v9/invites/" .. inviteCode .. "?with_counts=true"
     return service.HttpService:JSONDecode(game:HttpGet(apiURL))
 end)
 
 if successApi and result and result.guild then
-    local guildName = result.guild.name
+    local guild = result.guild
+    local guildName = guild.name
     local memberCount = tostring(result.approximate_member_count)
     local onlineCount = tostring(result.approximate_presence_count)
+    
     discordDesc = string.format(
         "<font color=\"#E0E6ED\"><b>Server Name:</b></font> <font color=\"#00E5FF\"><b>%s</b></font>\n" ..
         "<font color=\"#E0E6ED\"><b>Member Count:</b></font> <font color=\"#00FF99\"><b>%s</b></font>\n" ..
@@ -238,9 +229,29 @@ if successApi and result and result.guild then
         memberCount,
         onlineCount
     )
+
+    -- DiscordサーバーのアイコンURLから画像をダウンロードしてRobloxアセット化
+    if guild.icon then
+        local getasset = getcustomasset or getsynasset
+        if getasset and writefile then
+            local iconUrl = string.format("https://cdn.discordapp.com/icons/%s/%s.png?size=128", guild.id, guild.icon)
+            local successImg, imgData = pcall(function()
+                return game:HttpGet(iconUrl)
+            end)
+
+            if successImg and imgData then
+                local fileName = "XunznHub_DiscordIcon.png"
+                pcall(function()
+                    writefile(fileName, imgData)
+                    discordServerIcon = getasset(fileName)
+                end)
+            end
+        end
+    end
 end
 
-InfoTab:AddImageParagraph("rbxassetid://12058969055", discordDesc)
+-- 動的取得したサーバーアイコンを表示
+InfoTab:AddImageParagraph(discordServerIcon, discordDesc)
 
 InfoTab:AddButton({
     Name = "Copy & Join Discord",
