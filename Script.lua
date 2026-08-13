@@ -99,14 +99,6 @@ else
     Window:MakeTabGroup({ Name = "Others", Title = "Others" })
 end
 
-OrionLib:MakeNotification({
-    Name = "成功",
-    Content = "アイテムが正常に追加されました",
-    Image = "rbxassetid://4384403532",
-    Time = 3,
-    AccentColor = Color3.fromRGB(0, 255, 100),
-    AnimationStyle = "Bounce"
-})
 if not isLobby then
     local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
     local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
@@ -171,11 +163,10 @@ end
 
 InfoTab:AddSection({Name = getGradientText("System Notice", emeraldGreen, shinySilver)})
 
+-- Notice部分（Keybindの案内のみ表示に変更）
 InfoTab:AddParagraph(
     getGradientText("Notice", emeraldGreen, shinySilver),
-    "All systems operational and loaded.\n" ..
-    "Press <font color=\"#00FF99\"><b>RightShift</b></font> to toggle GUI window.\n" ..
-    "Please use script features responsibly."
+    "Press <font color=\"#00FF99\"><b>RightShift</b></font> to toggle GUI window."
 )
 
 InfoTab:AddSection({Name = getGradientText("Session Statistics", emeraldGreen, shinySilver)})
@@ -206,7 +197,8 @@ task.spawn(function()
             accountAge
         )
         
-        StatsParagraph:Set(statsText)
+        -- エラー修正点: タイトルと本文の2つの引数を正しく渡す
+        StatsParagraph:Set(getGradientText("Live Metrics", emeraldGreen, shinySilver), statsText)
     end
 end)
 
@@ -329,9 +321,8 @@ task.spawn(function()
             if not desc:GetAttribute("TitleGradientActive") then
                 desc:SetAttribute("TitleGradientActive", true)
                 task.spawn(function()
-                    local speed = 0.6 -- 一定速度でスクロールするスピード
+                    local speed = 0.6
                     while desc and desc.Parent and titleGradient and titleGradient.Parent do
-                        -- 一定方向へ止まらずループさせる計算（待ち時間を解消）
                         local offset = (tick() * speed) % 1
                         titleGradient.Offset = Vector2.new(-offset, 0)
                         task.wait()
