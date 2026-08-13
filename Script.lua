@@ -99,6 +99,14 @@ else
     Window:MakeTabGroup({ Name = "Others", Title = "Others" })
 end
 
+OrionLib:MakeNotification({
+    Name = "成功",
+    Content = "アイテムが正常に追加されました",
+    Image = "rbxassetid://4384403532",
+    Time = 3,
+    AccentColor = Color3.fromRGB(0, 255, 100),
+    AnimationStyle = "Bounce"
+})
 if not isLobby then
     local CombatTab = Window:MakeTab({Name = "Combat", Icon = "hand-fist", Group = "Main", PremiumOnly = false})
     local InvincibilityTab = Window:MakeTab({Name = "Invincibility", Icon = "shield", Group = "Main", PremiumOnly = false})
