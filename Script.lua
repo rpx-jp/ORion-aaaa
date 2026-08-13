@@ -132,7 +132,7 @@ local Window = OrionLib:MakeWindow({
     SaveConfig = true, 
     ConfigFolder = "XunznHub", 
     IntroEnabled = true, 
-    IntroText = "Loading... Please wait ♡ ( ˶ˆ ˆ˶ )", -- 可愛いローディング表記
+    IntroText = "Loading... Please wait", 
     Keybind = "RightShift", 
     FreeMouse = false
 })
@@ -173,12 +173,11 @@ local emeraldGreen = Color3.fromRGB(0, 220, 150)
 local shinySilver  = Color3.fromRGB(240, 245, 255)
 
 -- ==========================================
--- ★ DebrisField ESP & 安全なドロップダウンシステム ★
+-- ★ DebrisField ESP & 確実なドロップダウン更新 ★
 -- ==========================================
 local ESP_DebrisEnabled = false
 local selectedFilterItem = "All Items"
 local debrisItemsList = {"All Items"}
-local knownItemSet = {["All Items"] = true}
 local DebrisESPContainer = {}
 local DebrisDropdown = nil
 
@@ -252,41 +251,56 @@ local function createDebrisESP(model)
     }
 end
 
--- 安全なドロップダウンスキャン・更新処理
+-- 「All Items」を絶対に先頭保持する安全なスキャン・リフレッシュ処理
 local function scanAndRefreshDropdown(manualNotify)
     local debrisFolder = workspace:FindFirstChild("DebrisField")
-    local foundNew = false
+    local foundNamesMap = {}
+    local currentUniqueNames = {}
 
     if debrisFolder then
         for _, model in ipairs(debrisFolder:GetChildren()) do
             local name = getModelMeshName(model)
-            if name and not knownItemSet[name] then
-                knownItemSet[name] = true
-                table.insert(debrisItemsList, name)
-                foundNew = true
+            if name and not foundNamesMap[name] then
+                foundNamesMap[name] = true
+                table.insert(currentUniqueNames, name)
             end
         end
     end
 
-    if foundNew or manualNotify then
-        table.sort(debrisItemsList, function(a, b)
-            if a == "All Items" then return true end
-            if b == "All Items" then return false end
-            return a < b
-        end)
+    table.sort(currentUniqueNames)
+
+    -- 必ず1番目に "All Items" を配置
+    local newList = {"All Items"}
+    for _, name in ipairs(currentUniqueNames) do
+        table.insert(newList, name)
+    end
+
+    -- リストに変更があるか確認
+    local listChanged = (#newList ~= #debrisItemsList)
+    if not listChanged then
+        for i = 1, #newList do
+            if newList[i] ~= debrisItemsList[i] then
+                listChanged = true
+                break
+            end
+        end
+    end
+
+    if listChanged or manualNotify then
+        debrisItemsList = newList
 
         if DebrisDropdown then
-            local currentVal = selectedFilterItem
+            local currentVal = selectedFilterItem or "All Items"
             DebrisDropdown:Refresh(debrisItemsList, true)
             pcall(function()
                 DebrisDropdown:Set(currentVal)
             end)
         end
 
-        if foundNew then
-            Notify("New Item Discovered", "Updated ESP dropdown list! ♡", "Check")
+        if listChanged and not manualNotify then
+            Notify("Items Refreshed", "Updated item list in dropdown!", "Check")
         elseif manualNotify then
-            Notify("Items Scanned", "Found " .. tostring(#debrisItemsList - 1) .. " item types! ✨", "Yes")
+            Notify("Items Scanned", "Found " .. tostring(#debrisItemsList - 1) .. " item types!", "Yes")
         end
     end
 end
@@ -389,8 +403,8 @@ do
     end)
 end
 
--- 可愛いゲーム名読み込み表記
-local gameName = "Fetching game info... (๑•̀ㅂ•́)و✧"
+-- ゲーム名読み込み初期表記
+local gameName = "Fetching Game Info..."
 task.spawn(function()
     pcall(function()
         local rawName = service.MarketplaceService:GetProductInfo(game.PlaceId).Name
@@ -430,8 +444,7 @@ InfoTab:AddParagraph(
 
 InfoTab:AddSection({Name = getGradientText("Session Statistics", emeraldGreen, shinySilver)})
 
--- 可愛いステータス初期表記
-local StatsParagraph = InfoTab:AddParagraph(getGradientText("Live Metrics", emeraldGreen, shinySilver), "Calculating metrics... ( ›ω‹ )")
+local StatsParagraph = InfoTab:AddParagraph(getGradientText("Live Metrics", emeraldGreen, shinySilver), "Calculating Session Metrics...")
 
 local function UpdateStatsParagraph(paragraphObj, newTitleText, newContentText)
     if not paragraphObj then return end
@@ -582,7 +595,7 @@ InfoTab:AddButton({
     end
 })
 
--- UIアニメーション装飾処理（安全化）
+-- UIアニメーション装飾処理
 task.spawn(function()
     local CoreGui = (gethui and gethui()) or game:GetService("CoreGui")
     local TweenService = game:GetService("TweenService")
