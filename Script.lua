@@ -163,7 +163,6 @@ end
 
 InfoTab:AddSection({Name = getGradientText("System Notice", emeraldGreen, shinySilver)})
 
--- Notice部分（Keybindの案内のみ表示に変更）
 InfoTab:AddParagraph(
     getGradientText("Notice", emeraldGreen, shinySilver),
     "Press <font color=\"#00FF99\"><b>RightShift</b></font> to toggle GUI window."
@@ -172,6 +171,38 @@ InfoTab:AddParagraph(
 InfoTab:AddSection({Name = getGradientText("Session Statistics", emeraldGreen, shinySilver)})
 
 local StatsParagraph = InfoTab:AddParagraph(getGradientText("Live Metrics", emeraldGreen, shinySilver), "Calculating session metrics...")
+
+-- Orion Libraryの内部バグ（Frame.Content参照エラー）を安全に回避して更新する関数
+local function SetParagraphText(paragraphObj, titleText, contentText)
+    if not paragraphObj then return end
+    
+    -- まず通常の :Set() を試す
+    local ok = pcall(function()
+        paragraphObj:Set(titleText, contentText)
+    end)
+    
+    -- ライブラリ内部でエラーが出た場合は直接UIのTextLabelを探して安全更新
+    if not ok then
+        pcall(function()
+            local container = paragraphObj.Frame or paragraphObj.Container or paragraphObj.Instance
+            if not container and typeof(paragraphObj) == "Instance" then 
+                container = paragraphObj 
+            end
+            
+            if container then
+                for _, desc in ipairs(container:GetDescendants()) do
+                    if desc:IsA("TextLabel") then
+                        if desc.Name == "Title" then
+                            desc.Text = titleText
+                        else
+                            desc.Text = contentText
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end
 
 task.spawn(function()
     while task.wait(1) do
@@ -197,8 +228,8 @@ task.spawn(function()
             accountAge
         )
         
-        -- エラー修正点: タイトルと本文の2つの引数を正しく渡す
-        StatsParagraph:Set(getGradientText("Live Metrics", emeraldGreen, shinySilver), statsText)
+        -- 安全関数を通してParagraphを更新
+        SetParagraphText(StatsParagraph, getGradientText("Live Metrics", emeraldGreen, shinySilver), statsText)
     end
 end)
 
