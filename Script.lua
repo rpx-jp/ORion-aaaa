@@ -194,8 +194,10 @@ local function isFoodItem(name)
 end
 
 -- ==========================================
--- ★ 全ESP機能 ＆ ドロップダウン管理データ ★
+-- ★ 超高速パフォーマンスESP管理システム ★
 -- ==========================================
+local MaxESPDistance = 500 -- 最大表示距離 (m)
+
 -- 1. Player ESP
 local ESP_PlayerEnabled = false
 local selectedPlayerItem = "All Players"
@@ -210,14 +212,14 @@ local chestsList = {"All Chests"}
 local ChestsESPContainer = {}
 local ChestDropdown = nil
 
--- 3. Islands ESP (新機能: workspace.IslandContainer)
+-- 3. Islands ESP
 local ESP_IslandsEnabled = false
 local selectedIslandItem = "All Islands"
 local islandsList = {"All Islands"}
 local IslandsESPContainer = {}
 local IslandDropdown = nil
 
--- 4. Creatures / Enemies ESP (新機能: workspace.CreatureContainer)
+-- 4. Creatures ESP
 local ESP_CreaturesEnabled = false
 local selectedCreatureItem = "All Creatures"
 local creaturesList = {"All Creatures"}
@@ -236,6 +238,25 @@ local foodList = {"All Foods"}
 local DebrisESPContainer = {}
 local MaterialDropdown = nil
 local FoodDropdown = nil
+
+-- テキスト再描画スキップヘルパー関数 (60FPS固定の要)
+local function updateESPLabel(espData, newText, isVisible)
+    if not espData then return end
+    
+    if espData.Highlight and espData.Highlight.Enabled ~= isVisible then
+        espData.Highlight.Enabled = isVisible
+    end
+    if espData.Billboard and espData.Billboard.Enabled ~= isVisible then
+        espData.Billboard.Enabled = isVisible
+    end
+
+    if isVisible and espData.Label then
+        if espData.LastText ~= newText then
+            espData.Label.Text = newText
+            espData.LastText = newText
+        end
+    end
+end
 
 -- クリア関数群
 local function clearPlayerESP()
@@ -300,7 +321,7 @@ local function createPlayerESP(player)
     highlight.FillTransparency = 0.5
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
-    highlight.Enabled = (selectedPlayerItem == "All Players" or selectedPlayerItem == displayName)
+    highlight.Enabled = false
     highlight.Parent = char
 
     local billboard = Instance.new("BillboardGui")
@@ -309,7 +330,7 @@ local function createPlayerESP(player)
     billboard.Size = UDim2.new(0, 180, 0, 35)
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     billboard.AlwaysOnTop = true
-    billboard.Enabled = (selectedPlayerItem == "All Players" or selectedPlayerItem == displayName)
+    billboard.Enabled = false
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Parent = billboard
@@ -331,7 +352,8 @@ local function createPlayerESP(player)
         Root = rootPart,
         Humanoid = humanoid,
         Player = player,
-        DisplayName = displayName
+        DisplayName = displayName,
+        LastText = ""
     }
 end
 
@@ -351,7 +373,7 @@ local function createChestESP(model)
     highlight.FillTransparency = 0.6
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
-    highlight.Enabled = (selectedChestItem == "All Chests" or selectedChestItem == displayName)
+    highlight.Enabled = false
     highlight.Parent = primaryPart
 
     local billboard = Instance.new("BillboardGui")
@@ -360,7 +382,7 @@ local function createChestESP(model)
     billboard.Size = UDim2.new(0, 160, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 2.5, 0)
     billboard.AlwaysOnTop = true
-    billboard.Enabled = (selectedChestItem == "All Chests" or selectedChestItem == displayName)
+    billboard.Enabled = false
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Parent = billboard
@@ -380,7 +402,8 @@ local function createChestESP(model)
         Billboard = billboard,
         Label = nameLabel,
         Part = primaryPart,
-        DisplayName = displayName
+        DisplayName = displayName,
+        LastText = ""
     }
 end
 
@@ -400,7 +423,7 @@ local function createIslandESP(model)
     highlight.FillTransparency = 0.7
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
-    highlight.Enabled = (selectedIslandItem == "All Islands" or selectedIslandItem == displayName)
+    highlight.Enabled = false
     highlight.Parent = primaryPart
 
     local billboard = Instance.new("BillboardGui")
@@ -409,7 +432,7 @@ local function createIslandESP(model)
     billboard.Size = UDim2.new(0, 180, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 5, 0)
     billboard.AlwaysOnTop = true
-    billboard.Enabled = (selectedIslandItem == "All Islands" or selectedIslandItem == displayName)
+    billboard.Enabled = false
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Parent = billboard
@@ -429,7 +452,8 @@ local function createIslandESP(model)
         Billboard = billboard,
         Label = nameLabel,
         Part = primaryPart,
-        DisplayName = displayName
+        DisplayName = displayName,
+        LastText = ""
     }
 end
 
@@ -450,7 +474,7 @@ local function createCreatureESP(model)
     highlight.FillTransparency = 0.5
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
-    highlight.Enabled = (selectedCreatureItem == "All Creatures" or selectedCreatureItem == displayName)
+    highlight.Enabled = false
     highlight.Parent = primaryPart
 
     local billboard = Instance.new("BillboardGui")
@@ -459,7 +483,7 @@ local function createCreatureESP(model)
     billboard.Size = UDim2.new(0, 170, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     billboard.AlwaysOnTop = true
-    billboard.Enabled = (selectedCreatureItem == "All Creatures" or selectedCreatureItem == displayName)
+    billboard.Enabled = false
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Parent = billboard
@@ -480,7 +504,8 @@ local function createCreatureESP(model)
         Label = nameLabel,
         Part = primaryPart,
         Humanoid = humanoid,
-        DisplayName = displayName
+        DisplayName = displayName,
+        LastText = ""
     }
 end
 
@@ -508,17 +533,6 @@ local function createDebrisESP(model)
     local displayName = getModelMeshName(model)
     local isFood = isFoodItem(displayName)
 
-    local isVisible = false
-    if isFood then
-        if ESP_FoodEnabled then
-            isVisible = (selectedFoodItem == "All Foods" or selectedFoodItem == displayName)
-        end
-    else
-        if ESP_MaterialsEnabled then
-            isVisible = (selectedMaterialItem == "All Materials" or selectedMaterialItem == displayName)
-        end
-    end
-
     local highlight = Instance.new("Highlight")
     highlight.Name = "Xunzn_DebrisHighlight"
     highlight.Adornee = model
@@ -526,7 +540,7 @@ local function createDebrisESP(model)
     highlight.FillTransparency = 0.65
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
-    highlight.Enabled = isVisible
+    highlight.Enabled = false
     highlight.Parent = primaryPart
 
     local billboard = Instance.new("BillboardGui")
@@ -535,7 +549,7 @@ local function createDebrisESP(model)
     billboard.Size = UDim2.new(0, 160, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 2.5, 0)
     billboard.AlwaysOnTop = true
-    billboard.Enabled = isVisible
+    billboard.Enabled = false
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Parent = billboard
@@ -556,13 +570,14 @@ local function createDebrisESP(model)
         Label = nameLabel,
         Part = primaryPart,
         DisplayName = displayName,
-        IsFood = isFood
+        IsFood = isFood,
+        LastText = ""
     }
 end
 
--- ★ 全ESPカテゴリ自動スキャン＆ドロップダウン自動リフレッシュ関数 ★
+-- 全ESPカテゴリ自動スキャン＆ドロップダウン自動リフレッシュ関数
 local function scanAndRefreshDropdowns()
-    -- 1. Players スキャン
+    -- 1. Players
     local currentPlayers = {}
     for _, plr in ipairs(service.Players:GetPlayers()) do
         if plr ~= LocalPlayer then
@@ -573,13 +588,7 @@ local function scanAndRefreshDropdowns()
     local newPlayerList = {"All Players"}
     for _, pName in ipairs(currentPlayers) do table.insert(newPlayerList, pName) end
 
-    local playerChanged = (#newPlayerList ~= #playersList)
-    if not playerChanged then
-        for i = 1, #newPlayerList do
-            if newPlayerList[i] ~= playersList[i] then playerChanged = true; break end
-        end
-    end
-    if playerChanged then
+    if #newPlayerList ~= #playersList then
         playersList = newPlayerList
         if PlayerDropdown then
             local cur = selectedPlayerItem or "All Players"
@@ -588,7 +597,7 @@ local function scanAndRefreshDropdowns()
         end
     end
 
-    -- 2. Chests スキャン
+    -- 2. Chests
     local chestsFolder = workspace:FindFirstChild("Chests")
     local foundChestsMap = {}
     local currentChests = {}
@@ -605,13 +614,7 @@ local function scanAndRefreshDropdowns()
     local newChestList = {"All Chests"}
     for _, cName in ipairs(currentChests) do table.insert(newChestList, cName) end
 
-    local chestChanged = (#newChestList ~= #chestsList)
-    if not chestChanged then
-        for i = 1, #newChestList do
-            if newChestList[i] ~= chestsList[i] then chestChanged = true; break end
-        end
-    end
-    if chestChanged then
+    if #newChestList ~= #chestsList then
         chestsList = newChestList
         if ChestDropdown then
             local cur = selectedChestItem or "All Chests"
@@ -620,7 +623,7 @@ local function scanAndRefreshDropdowns()
         end
     end
 
-    -- 3. Islands スキャン (workspace.IslandContainer)
+    -- 3. Islands
     local islandsFolder = workspace:FindFirstChild("IslandContainer")
     local foundIslandsMap = {}
     local currentIslands = {}
@@ -637,13 +640,7 @@ local function scanAndRefreshDropdowns()
     local newIslandList = {"All Islands"}
     for _, iName in ipairs(currentIslands) do table.insert(newIslandList, iName) end
 
-    local islandChanged = (#newIslandList ~= #islandsList)
-    if not islandChanged then
-        for i = 1, #newIslandList do
-            if newIslandList[i] ~= islandsList[i] then islandChanged = true; break end
-        end
-    end
-    if islandChanged then
+    if #newIslandList ~= #islandsList then
         islandsList = newIslandList
         if IslandDropdown then
             local cur = selectedIslandItem or "All Islands"
@@ -652,7 +649,7 @@ local function scanAndRefreshDropdowns()
         end
     end
 
-    -- 4. Creatures スキャン (workspace.CreatureContainer)
+    -- 4. Creatures
     local creaturesFolder = workspace:FindFirstChild("CreatureContainer")
     local foundCreaturesMap = {}
     local currentCreatures = {}
@@ -669,13 +666,7 @@ local function scanAndRefreshDropdowns()
     local newCreatureList = {"All Creatures"}
     for _, crName in ipairs(currentCreatures) do table.insert(newCreatureList, crName) end
 
-    local creatureChanged = (#newCreatureList ~= #creaturesList)
-    if not creatureChanged then
-        for i = 1, #newCreatureList do
-            if newCreatureList[i] ~= creaturesList[i] then creatureChanged = true; break end
-        end
-    end
-    if creatureChanged then
+    if #newCreatureList ~= #creaturesList then
         creaturesList = newCreatureList
         if CreatureDropdown then
             local cur = selectedCreatureItem or "All Creatures"
@@ -684,7 +675,7 @@ local function scanAndRefreshDropdowns()
         end
     end
 
-    -- 5. Debris & Food スキャン
+    -- 5. Debris & Food
     local debrisFolder = workspace:FindFirstChild("DebrisField")
     local foundMaterialsMap = {}
     local foundFoodsMap = {}
@@ -723,21 +714,7 @@ local function scanAndRefreshDropdowns()
     local newFoodList = {"All Foods"}
     for _, name in ipairs(currentFoods) do table.insert(newFoodList, name) end
 
-    local matChanged = (#newMatList ~= #materialsList)
-    if not matChanged then
-        for i = 1, #newMatList do
-            if newMatList[i] ~= materialsList[i] then matChanged = true; break end
-        end
-    end
-
-    local foodChanged = (#newFoodList ~= #foodList)
-    if not foodChanged then
-        for i = 1, #newFoodList do
-            if newFoodList[i] ~= foodList[i] then foodChanged = true; break end
-        end
-    end
-
-    if matChanged then
+    if #newMatList ~= #materialsList then
         materialsList = newMatList
         if MaterialDropdown then
             local cur = selectedMaterialItem or "All Materials"
@@ -746,7 +723,7 @@ local function scanAndRefreshDropdowns()
         end
     end
 
-    if foodChanged then
+    if #newFoodList ~= #foodList then
         foodList = newFoodList
         if FoodDropdown then
             local cur = selectedFoodItem or "All Foods"
@@ -757,9 +734,27 @@ local function scanAndRefreshDropdowns()
 end
 
 -- ==========================================
--- ★ ESPTab UI 構築 (全項目ドロップダウン対応) ★
+-- ★ ESPTab UI 構築 (最大距離スライダー搭載) ★
 -- ==========================================
 if ESPTab then
+    -- 全般設定セクション
+    ESPTab:AddSection({
+        Name = getGradientText("ESP General Settings", emeraldGreen, shinySilver)
+    })
+
+    ESPTab:AddSlider({
+        Name = "Max ESP Distance",
+        Min = 50,
+        Max = 3000,
+        Default = 500,
+        Color = emeraldGreen,
+        Increment = 50,
+        ValueName = "m",
+        Callback = function(Value)
+            MaxESPDistance = Value
+        end
+    })
+
     -- 1. Player ESP
     ESPTab:AddSection({
         Name = getGradientText("Player ESP", emeraldGreen, shinySilver)
@@ -810,7 +805,7 @@ if ESPTab then
         end
     })
 
-    -- 3. Islands ESP (新機能: workspace.IslandContainer)
+    -- 3. Islands ESP
     ESPTab:AddSection({
         Name = getGradientText("Islands ESP", emeraldGreen, shinySilver)
     })
@@ -835,7 +830,7 @@ if ESPTab then
         end
     })
 
-    -- 4. Creatures / Enemies ESP (新機能: workspace.CreatureContainer)
+    -- 4. Creatures ESP
     ESPTab:AddSection({
         Name = getGradientText("Creatures ESP", emeraldGreen, shinySilver)
     })
@@ -957,162 +952,174 @@ if ConfigTab then
     })
 end
 
--- バックグラウンド全自動スキャン (2秒間隔)
+-- バックグラウンド全自動スキャン (5秒間隔に超軽量化)
 task.spawn(function()
-    while task.wait(2) do
+    while task.wait(5) do
         scanAndRefreshDropdowns()
     end
 end)
 
--- ESP メイン描画・距離・フィルターリアルタイム更新ループ
+-- ★ 超高速・60FPS固定 ESPリアルタイム描画ループ ★
 task.spawn(function()
-    while task.wait(0.3) do
+    while task.wait(0.2) do
         local character = LocalPlayer.Character
         local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        
+        if rootPart then
+            local myPos = rootPart.Position
 
-        -- 1. Player ESP 更新
-        if ESP_PlayerEnabled then
-            for _, plr in ipairs(service.Players:GetPlayers()) do
-                if plr ~= LocalPlayer and plr.Character then
-                    if not PlayerESPContainer[plr] or not PlayerESPContainer[plr].Highlight.Parent then
-                        createPlayerESP(plr)
-                    end
-
-                    local espData = PlayerESPContainer[plr]
-                    if espData and espData.Label and espData.Root and espData.Humanoid and rootPart then
-                        local isVisible = (selectedPlayerItem == "All Players" or selectedPlayerItem == espData.DisplayName)
-                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
-                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
-
-                        if isVisible then
-                            local dist = math.round((rootPart.Position - espData.Root.Position).Magnitude)
-                            local hpPct = math.round((espData.Humanoid.Health / math.max(1, espData.Humanoid.MaxHealth)) * 100)
-                            espData.Label.Text = string.format("%s [%dm] [%d%%]", espData.DisplayName, dist, hpPct)
+            -- 1. Player ESP 更新
+            if ESP_PlayerEnabled then
+                for _, plr in ipairs(service.Players:GetPlayers()) do
+                    if plr ~= LocalPlayer and plr.Character then
+                        if not PlayerESPContainer[plr] or not PlayerESPContainer[plr].Highlight.Parent then
+                            createPlayerESP(plr)
                         end
-                    end
-                end
-            end
-        else
-            if next(PlayerESPContainer) then clearPlayerESP() end
-        end
 
-        -- 2. Chests ESP 更新
-        if ESP_ChestsEnabled then
-            local chestsFolder = workspace:FindFirstChild("Chests")
-            if chestsFolder then
-                for _, model in ipairs(chestsFolder:GetChildren()) do
-                    if not ChestsESPContainer[model] then
-                        createChestESP(model)
-                    end
-
-                    local espData = ChestsESPContainer[model]
-                    if espData and espData.Label and espData.Part and rootPart then
-                        local isVisible = (selectedChestItem == "All Chests" or selectedChestItem == espData.DisplayName)
-                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
-                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
-
-                        if isVisible then
-                            local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
-                            espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
-                        end
-                    end
-                end
-            end
-        else
-            if next(ChestsESPContainer) then clearChestsESP() end
-        end
-
-        -- 3. Islands ESP 更新 (workspace.IslandContainer)
-        if ESP_IslandsEnabled then
-            local islandsFolder = workspace:FindFirstChild("IslandContainer")
-            if islandsFolder then
-                for _, model in ipairs(islandsFolder:GetChildren()) do
-                    if not IslandsESPContainer[model] then
-                        createIslandESP(model)
-                    end
-
-                    local espData = IslandsESPContainer[model]
-                    if espData and espData.Label and espData.Part and rootPart then
-                        local isVisible = (selectedIslandItem == "All Islands" or selectedIslandItem == espData.DisplayName)
-                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
-                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
-
-                        if isVisible then
-                            local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
-                            espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
-                        end
-                    end
-                end
-            end
-        else
-            if next(IslandsESPContainer) then clearIslandsESP() end
-        end
-
-        -- 4. Creatures ESP 更新 (workspace.CreatureContainer)
-        if ESP_CreaturesEnabled then
-            local creaturesFolder = workspace:FindFirstChild("CreatureContainer")
-            if creaturesFolder then
-                for _, model in ipairs(creaturesFolder:GetChildren()) do
-                    if not CreaturesESPContainer[model] then
-                        createCreatureESP(model)
-                    end
-
-                    local espData = CreaturesESPContainer[model]
-                    if espData and espData.Label and espData.Part and rootPart then
-                        local isVisible = (selectedCreatureItem == "All Creatures" or selectedCreatureItem == espData.DisplayName)
-                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
-                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
-
-                        if isVisible then
-                            local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
-                            if espData.Humanoid then
+                        local espData = PlayerESPContainer[plr]
+                        if espData and espData.Root and espData.Humanoid then
+                            local dist = math.round((myPos - espData.Root.Position).Magnitude)
+                            local isVisible = (dist <= MaxESPDistance) and (selectedPlayerItem == "All Players" or selectedPlayerItem == espData.DisplayName)
+                            
+                            if isVisible then
                                 local hpPct = math.round((espData.Humanoid.Health / math.max(1, espData.Humanoid.MaxHealth)) * 100)
-                                espData.Label.Text = string.format("%s [%dm] [%d%%]", espData.DisplayName, dist, hpPct)
+                                local newText = string.format("%s [%dm] [%d%%]", espData.DisplayName, dist, hpPct)
+                                updateESPLabel(espData, newText, true)
                             else
-                                espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                                updateESPLabel(espData, "", false)
                             end
                         end
                     end
                 end
+            else
+                if next(PlayerESPContainer) then clearPlayerESP() end
             end
-        else
-            if next(CreaturesESPContainer) then clearCreaturesESP() end
-        end
 
-        -- 5. Debris & Food ESP 更新
-        if ESP_MaterialsEnabled or ESP_FoodEnabled then
-            local debrisFolder = workspace:FindFirstChild("DebrisField")
-            if debrisFolder then
-                for _, model in ipairs(debrisFolder:GetChildren()) do
-                    if not DebrisESPContainer[model] then
-                        createDebrisESP(model)
-                    end
-                    
-                    local espData = DebrisESPContainer[model]
-                    if espData and espData.Label and espData.Part and rootPart then
-                        local isVisible = false
-                        if espData.IsFood then
-                            if ESP_FoodEnabled then
-                                isVisible = (selectedFoodItem == "All Foods" or selectedFoodItem == espData.DisplayName)
-                            end
-                        else
-                            if ESP_MaterialsEnabled then
-                                isVisible = (selectedMaterialItem == "All Materials" or selectedMaterialItem == espData.DisplayName)
-                            end
+            -- 2. Chests ESP 更新
+            if ESP_ChestsEnabled then
+                local chestsFolder = workspace:FindFirstChild("Chests")
+                if chestsFolder then
+                    for _, model in ipairs(chestsFolder:GetChildren()) do
+                        if not ChestsESPContainer[model] then
+                            createChestESP(model)
                         end
 
-                        if espData.Highlight then espData.Highlight.Enabled = isVisible end
-                        if espData.Billboard then espData.Billboard.Enabled = isVisible end
-
-                        if isVisible then
-                            local dist = math.round((rootPart.Position - espData.Part.Position).Magnitude)
-                            espData.Label.Text = string.format("%s [%dm]", espData.DisplayName, dist)
+                        local espData = ChestsESPContainer[model]
+                        if espData and espData.Part then
+                            local dist = math.round((myPos - espData.Part.Position).Magnitude)
+                            local isVisible = (dist <= MaxESPDistance) and (selectedChestItem == "All Chests" or selectedChestItem == espData.DisplayName)
+                            
+                            if isVisible then
+                                local newText = string.format("%s [%dm]", espData.DisplayName, dist)
+                                updateESPLabel(espData, newText, true)
+                            else
+                                updateESPLabel(espData, "", false)
+                            end
                         end
                     end
                 end
+            else
+                if next(ChestsESPContainer) then clearChestsESP() end
             end
-        else
-            if next(DebrisESPContainer) then clearDebrisESP() end
+
+            -- 3. Islands ESP 更新
+            if ESP_IslandsEnabled then
+                local islandsFolder = workspace:FindFirstChild("IslandContainer")
+                if islandsFolder then
+                    for _, model in ipairs(islandsFolder:GetChildren()) do
+                        if not IslandsESPContainer[model] then
+                            createIslandESP(model)
+                        end
+
+                        local espData = IslandsESPContainer[model]
+                        if espData and espData.Part then
+                            local dist = math.round((myPos - espData.Part.Position).Magnitude)
+                            local isVisible = (dist <= MaxESPDistance) and (selectedIslandItem == "All Islands" or selectedIslandItem == espData.DisplayName)
+                            
+                            if isVisible then
+                                local newText = string.format("%s [%dm]", espData.DisplayName, dist)
+                                updateESPLabel(espData, newText, true)
+                            else
+                                updateESPLabel(espData, "", false)
+                            end
+                        end
+                    end
+                end
+            else
+                if next(IslandsESPContainer) then clearIslandsESP() end
+            end
+
+            -- 4. Creatures ESP 更新
+            if ESP_CreaturesEnabled then
+                local creaturesFolder = workspace:FindFirstChild("CreatureContainer")
+                if creaturesFolder then
+                    for _, model in ipairs(creaturesFolder:GetChildren()) do
+                        if not CreaturesESPContainer[model] then
+                            createCreatureESP(model)
+                        end
+
+                        local espData = CreaturesESPContainer[model]
+                        if espData and espData.Part then
+                            local dist = math.round((myPos - espData.Part.Position).Magnitude)
+                            local isVisible = (dist <= MaxESPDistance) and (selectedCreatureItem == "All Creatures" or selectedCreatureItem == espData.DisplayName)
+                            
+                            if isVisible then
+                                local newText
+                                if espData.Humanoid then
+                                    local hpPct = math.round((espData.Humanoid.Health / math.max(1, espData.Humanoid.MaxHealth)) * 100)
+                                    newText = string.format("%s [%dm] [%d%%]", espData.DisplayName, dist, hpPct)
+                                else
+                                    newText = string.format("%s [%dm]", espData.DisplayName, dist)
+                                end
+                                updateESPLabel(espData, newText, true)
+                            else
+                                updateESPLabel(espData, "", false)
+                            end
+                        end
+                    end
+                end
+            else
+                if next(CreaturesESPContainer) then clearCreaturesESP() end
+            end
+
+            -- 5. Debris & Food ESP 更新
+            if ESP_MaterialsEnabled or ESP_FoodEnabled then
+                local debrisFolder = workspace:FindFirstChild("DebrisField")
+                if debrisFolder then
+                    for _, model in ipairs(debrisFolder:GetChildren()) do
+                        if not DebrisESPContainer[model] then
+                            createDebrisESP(model)
+                        end
+                        
+                        local espData = DebrisESPContainer[model]
+                        if espData and espData.Part then
+                            local dist = math.round((myPos - espData.Part.Position).Magnitude)
+                            local isVisible = false
+
+                            if dist <= MaxESPDistance then
+                                if espData.IsFood then
+                                    if ESP_FoodEnabled then
+                                        isVisible = (selectedFoodItem == "All Foods" or selectedFoodItem == espData.DisplayName)
+                                    end
+                                else
+                                    if ESP_MaterialsEnabled then
+                                        isVisible = (selectedMaterialItem == "All Materials" or selectedMaterialItem == espData.DisplayName)
+                                    end
+                                end
+                            end
+
+                            if isVisible then
+                                local newText = string.format("%s [%dm]", espData.DisplayName, dist)
+                                updateESPLabel(espData, newText, true)
+                            else
+                                updateESPLabel(espData, "", false)
+                            end
+                        end
+                    end
+                end
+            else
+                if next(DebrisESPContainer) then clearDebrisESP() end
+            end
         end
     end
 end)
