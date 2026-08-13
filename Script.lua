@@ -172,35 +172,63 @@ InfoTab:AddSection({Name = getGradientText("Session Statistics", emeraldGreen, s
 
 local StatsParagraph = InfoTab:AddParagraph(getGradientText("Live Metrics", emeraldGreen, shinySilver), "Calculating session metrics...")
 
--- Orion Libraryの内部バグ（Frame.Content参照エラー）を安全に回避して更新する関数
-local function SetParagraphText(paragraphObj, titleText, contentText)
+-- 上書き問題を解決する直接更新関数
+local function UpdateStatsParagraph(paragraphObj, newTitleText, newContentText)
     if not paragraphObj then return end
     
-    -- まず通常の :Set() を試す
-    local ok = pcall(function()
-        paragraphObj:Set(titleText, contentText)
-    end)
-    
-    -- ライブラリ内部でエラーが出た場合は直接UIのTextLabelを探して安全更新
-    if not ok then
-        pcall(function()
-            local container = paragraphObj.Frame or paragraphObj.Container or paragraphObj.Instance
-            if not container and typeof(paragraphObj) == "Instance" then 
-                container = paragraphObj 
+    local frame = nil
+    if typeof(paragraphObj) == "Instance" then
+        frame = paragraphObj
+    elseif typeof(paragraphObj) == "table" then
+        frame = paragraphObj.Frame or paragraphObj.Instance or paragraphObj.Container
+    end
+
+    if frame and typeof(frame) == "Instance" then
+        local labels = {}
+        for _, desc in ipairs(frame:GetDescendants()) do
+            if desc:IsA("TextLabel") then
+                table.insert(labels, desc)
             end
-            
-            if container then
-                for _, desc in ipairs(container:GetDescendants()) do
-                    if desc:IsA("TextLabel") then
-                        if desc.Name == "Title" then
-                            desc.Text = titleText
-                        else
-                            desc.Text = contentText
+        end
+        
+        if #labels >= 2 then
+            table.sort(labels, function(a, b)
+                return a.AbsolutePosition.Y < b.AbsolutePosition.Y
+            end)
+            labels[1].Text = newTitleText
+            labels[2].Text = newContentText
+            return
+        elseif #labels == 1 then
+            labels[1].Text = newContentText
+            return
+        end
+    end
+
+    -- フォールバック（CoreGuiからの探索）
+    local CoreGui = (gethui and gethui()) or game:GetService("CoreGui")
+    local OrionGui = CoreGui:FindFirstChild("OrionBliz")
+    if OrionGui then
+        for _, desc in ipairs(OrionGui:GetDescendants()) do
+            if desc:IsA("TextLabel") and (desc.Text:find("Live Metrics") or desc.Text:find("Calculating")) then
+                local parentFrame = desc:FindFirstAncestorWhichIsA("Frame")
+                if parentFrame then
+                    local labels = {}
+                    for _, child in ipairs(parentFrame:GetDescendants()) do
+                        if child:IsA("TextLabel") then
+                            table.insert(labels, child)
                         end
+                    end
+                    if #labels >= 2 then
+                        table.sort(labels, function(a, b)
+                            return a.AbsolutePosition.Y < b.AbsolutePosition.Y
+                        end)
+                        labels[1].Text = newTitleText
+                        labels[2].Text = newContentText
+                        return
                     end
                 end
             end
-        end)
+        end
     end
 end
 
@@ -228,8 +256,7 @@ task.spawn(function()
             accountAge
         )
         
-        -- 安全関数を通してParagraphを更新
-        SetParagraphText(StatsParagraph, getGradientText("Live Metrics", emeraldGreen, shinySilver), statsText)
+        UpdateStatsParagraph(StatsParagraph, getGradientText("Live Metrics", emeraldGreen, shinySilver), statsText)
     end
 end)
 
